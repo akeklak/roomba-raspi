@@ -1,0 +1,18 @@
+# Simulator on your Mac or a Linux machine.  Usage: ./scripts/sim.sh up   (see docs/simulation.md)
+services:
+  sim:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: roomba-raspi-sim
+    volumes:
+      - ..:/repo
+    ports:
+      - "8765:8765"   # Foxglove bridge
+    environment:
+      - ROS_DOMAIN_ID=0
+      # Keep ROS traffic inside the container.
+      - ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+    command: ros2 launch roomba_sim sim.launch.py
+    stdin_open: true
+    tty: true
