@@ -1,0 +1,21 @@
+# Starts the robot stack at boot. Install (optional, after day-one testing works by hand):
+#   sudo cp systemd/roomba-bringup.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now roomba-bringup
+# Logs:  journalctl -u roomba-bringup -f
+# Assumes the repo is cloned to /home/ubuntu/roomba-raspi and the user is "ubuntu";
+# edit User= and the paths if yours differ.
+
+[Unit]
+Description=Roomba Raspi ROS 2 bringup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+Environment=ROS_DOMAIN_ID=0
+ExecStart=/bin/bash -lc 'source /opt/ros/jazzy/setup.bash && source /home/ubuntu/roomba-raspi/ros2_ws/install/setup.bash && exec ros2 launch roomba_bringup robot.launch.py'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,19 @@
+# Third-party ROS 2 packages built from source (no Jazzy binaries exist for these).
+# Import with:  vcs import ros2_ws/src < ros2_ws/roomba.repos   (run from the repo root)
+repositories:
+  # Roomba / Create 2 Open Interface driver. The 600 series uses the CREATE_2 model.
+  # No jazzy branch exists upstream; iron is the newest ROS 2 branch and is source-compatible.
+  third_party/create_robot:
+    type: git
+    url: https://github.com/AutonomyLab/create_robot.git
+    version: iron
+  third_party/libcreate:
+    type: git
+    url: https://github.com/AutonomyLab/libcreate.git
+    version: master
+  # LD19 lidar driver (lifecycle component). Supports Humble and Jazzy.
+  # Its SDK is a git submodule: setup_pi.sh initialises it after import.
+  third_party/ldrobot-lidar-ros2:
+    type: git
+    url: https://github.com/Myzhar/ldrobot-lidar-ros2.git
+    version: main

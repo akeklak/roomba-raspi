@@ -1,0 +1,14 @@
+# Stable device names for the robot's USB serial adapters.
+# Installed by scripts/setup_pi.sh to /etc/udev/rules.d/.
+#
+# The vendor/product IDs below are the usual chips for these parts, but CHECK THEM on day one:
+#   plug in one device at a time and run:  udevadm info -q property -n /dev/ttyUSB0 | grep -E 'ID_VENDOR_ID|ID_MODEL_ID|ID_SERIAL_SHORT'
+# If both adapters turn out to use the same chip, add  ATTRS{serial}=="<ID_SERIAL_SHORT>"  to
+# each rule so they can be told apart. Reload with:
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+
+# Roomba USB-to-mini-DIN cable (EZSync / FTDI FT232R) -> /dev/roomba
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", MODE="0666", SYMLINK+="roomba"
+
+# LD19 lidar USB adapter board (Silicon Labs CP2102) -> /dev/ldlidar
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", MODE="0666", SYMLINK+="ldlidar"

@@ -1,0 +1,10 @@
+# colcon
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+# third-party sources fetched by vcs (see ros2_ws/roomba.repos)
+ros2_ws/src/third_party/
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
