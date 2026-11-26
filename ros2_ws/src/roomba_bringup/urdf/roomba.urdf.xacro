@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<!--
+  Roomba 675 + Raspberry Pi 4 robot model.
+
+  The Roomba 600 body is the same as the Create 2, so we reuse create_description and add
+  the sensors we mount on top. All sensor offsets are PLACEHOLDERS: measure them on the
+  real robot (from the centre of the Roomba, between the wheels, at floor level) and
+  update the properties below. x = forward, y = left, z = up, in metres.
+-->
+<robot name="roomba_raspi" xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:include filename="$(find create_description)/urdf/create_2.urdf.xacro" />
+
+  <!-- LD19 lidar: centre of the spinning head's optical plane. -->
+  <xacro:property name="lidar_x" value="-0.02" />
+  <xacro:property name="lidar_y" value="0.0" />
+  <xacro:property name="lidar_z" value="0.13" />
+  <!-- Rotate if the lidar's cable does not point backwards (0 = cable at the back). -->
+  <xacro:property name="lidar_yaw" value="0.0" />
+
+  <!-- Front camera, looking forward and slightly down at the floor. -->
+  <xacro:property name="camera_x" value="0.15" />
+  <xacro:property name="camera_y" value="0.0" />
+  <xacro:property name="camera_z" value="0.09" />
+  <xacro:property name="camera_pitch" value="0.35" />
+
+  <link name="ldlidar_link" />
+  <joint name="ldlidar_joint" type="fixed">
+    <parent link="base_link" />
+    <child link="ldlidar_link" />
+    <origin xyz="${lidar_x} ${lidar_y} ${lidar_z}" rpy="0 0 ${lidar_yaw}" />
+  </joint>
+
+  <link name="camera_link" />
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link" />
+    <child link="camera_link" />
+    <origin xyz="${camera_x} ${camera_y} ${camera_z}" rpy="0 ${camera_pitch} 0" />
+  </joint>
+
+  <!-- Image frame using the optical convention (z forward, x right, y down). -->
+  <link name="camera_optical_link" />
+  <joint name="camera_optical_joint" type="fixed">
+    <parent link="camera_link" />
+    <child link="camera_optical_link" />
+    <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}" />
+  </joint>
+</robot>

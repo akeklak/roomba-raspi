@@ -1,0 +1,8 @@
+# Nav2 lifecycle manager that configures and activates the lidar component on startup.
+lidar_lifecycle_manager:
+  ros__parameters:
+    autostart: true
+    node_names: ["ldlidar_node"]
+    bond_timeout: 5.0
+    attempt_respawn_reconnection: true
+    bond_respawn_max_duration: 10.0

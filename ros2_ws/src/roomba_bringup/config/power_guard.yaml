@@ -1,0 +1,18 @@
+# Parameters for power_guard (roomba_bringup/power_guard.py).
+# The Pi is powered from the Roomba battery, so it drains the battery whenever the robot is
+# off the dock. power_guard shuts the Pi down cleanly before the battery runs flat.
+power_guard:
+  ros__parameters:
+    # Shut down when the battery charge ratio (0.0 to 1.0) stays below this...
+    shutdown_charge_ratio: 0.12
+    # ...for this many seconds while not on the charger (filters out momentary dips).
+    grace_seconds: 120.0
+    # Log a warning below this ratio.
+    warn_charge_ratio: 0.25
+    # Shut down if no battery reading arrives for this long (the driver or cable died).
+    # 0 disables this check.
+    stale_seconds: 0.0
+    # Safety default: only log what it would do. Set to false once the sudoers rule
+    # from docs/bringup.md is installed and you've watched it work once.
+    dry_run: true
+    shutdown_command: ["sudo", "-n", "/usr/bin/systemctl", "poweroff"]

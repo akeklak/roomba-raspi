@@ -1,0 +1,25 @@
+# Parameters for the LD19 lidar component (Myzhar/ldrobot-lidar-ros2).
+ldlidar_node:
+  ros__parameters:
+    general:
+      debug_mode: false
+
+    comm:
+      # /dev/ldlidar is a stable name made by scripts/99-roomba-raspi.rules.
+      serial_port: "/dev/ldlidar"
+      baudrate: 230400  # LD19 / D500 kit
+      timeout_msec: 1000
+
+    lidar:
+      model: "LD19"
+      rot_verse: "CCW"  # ROS convention
+      units: "M"
+      frame_id: "ldlidar_link"  # must match urdf/roomba.urdf.xacro
+      # A fixed number of beams per scan. slam_toolbox rejects scans whose size changes.
+      bins: 455
+      range_min: 0.03
+      range_max: 12.0
+      # If the Pi, mast or cables block part of the view, crop that sector out here.
+      enable_angle_crop: false
+      angle_crop_min: 135.0
+      angle_crop_max: 225.0
