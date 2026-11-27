@@ -27,7 +27,9 @@ length and a JSON header:
 
 The UI sends:
     drive        {linear, angular}   repeated while driving; the robot stops if they stop coming.
-                                     Driving also cancels a navigation goal (you took over).
+                                     Driving also cancels a navigation goal (you took over). The
+                                     robot slows and stops short of anything the lidar sees in
+                                     its way (turning is always allowed).
     camera       {enabled}           whether this page wants camera pictures
     costmap      {enabled}           whether this page wants Nav2's costmap
     goal         {x, y, yaw}         drive to this pose on the map
@@ -176,6 +178,134 @@ def clamp_drive(cmd: dict, max_linear: float, max_angular: float) -> tuple:
     if not (math.isfinite(linear) and math.isfinite(angular)):
         return 0.0, 0.0
     return (max(-max_linear, min(max_linear, linear)), max(-max_angular, min(max_angular, angular)))
+
+
+# Driving by hand stops short of what the lidar sees. Pushing into a wall makes the wheels spin in
+# place, so odometry says the robot moved when it didn't, and SLAM loses track of where it is
+# for good (a smeared map and doubled walls). Nav2 keeps its own distance, so this is only for
+# the drive keys.
+
+def _quat_matrix(q) -> list:
+    x, y, z, w = q
+    return [[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]]
+
+
+def static_pose(static: dict, frame_name: str, base: str) -> Optional[tuple]:
+    """Where `frame_name` sits on the robot, as (xx, xy, yx, yy, x, y): the floor-plane part of
+    its rotation and its position in `base`. Built from static transforms (child -> {parent, t,
+    q}, as `transforms` makes them). None if `frame_name` doesn't hang below `base` that way."""
+    rot = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    pos = [0.0, 0.0, 0.0]
+    f = frame(frame_name)
+    for _ in range(64):
+        if f == base:
+            return rot[0][0], rot[0][1], rot[1][0], rot[1][1], pos[0], pos[1]
+        tr = static.get(f)
+        if tr is None:
+            return None
+        r = _quat_matrix(tr['q'])
+        rot = [[sum(r[i][k] * rot[k][j] for k in range(3)) for j in range(3)] for i in range(3)]
+        pos = [sum(r[i][k] * pos[k] for k in range(3)) + tr['t'][i] for i in range(3)]
+        f = tr['parent']
+    return None
+
+
+def nearby_points(msg, pose: tuple, reach: float, every: int = 1) -> list:
+    """The lidar hits within `reach` of the robot's center, as (x, y) on the robot (`pose` from
+    `static_pose`), from every `every`th beam."""
+    xx, xy, yx, yy, ox, oy = pose
+    out = []
+    for i in range(0, len(msg.ranges), every):
+        r = msg.ranges[i]
+        if msg.range_min <= r <= msg.range_max:  # also false for NaN
+            a = msg.angle_min + i * msg.angle_increment
+            lx, ly = r * math.cos(a), r * math.sin(a)
+            x, y = xx * lx + xy * ly + ox, yx * lx + yy * ly + oy
+            if x * x + y * y <= reach * reach:
+                out.append((x, y))
+    return out
+
+
+def free_travel(points: list, linear: float, angular: float, radius: float, body: float,
+                horizon: float, step: float = 0.01) -> float:
+    """How far the robot, a circle of `radius` around its center, can drive along the arc that
+    (linear, angular) makes before it comes up against one of `points`, up to `horizon` meters.
+    Points that are getting farther away don't count (so it can always back away from a wall),
+    nor do points inside `body` (the robot itself, or noise)."""
+    if linear == 0.0:
+        return horizon  # turning in place: a round robot sweeps nothing new
+    sign = 1.0 if linear > 0 else -1.0
+    turn = angular / abs(linear)  # radians per meter driven
+    near = [(px, py, math.hypot(px, py)) for px, py in points]
+    near = [p for p in near if p[2] >= body]
+    d = step
+    while d <= horizon + 1e-9:
+        if abs(turn * d) < 1e-6:
+            cx, cy = sign * d, 0.0
+        else:
+            cx, cy = sign * math.sin(turn * d) / turn, sign * (1.0 - math.cos(turn * d)) / turn
+        for px, py, d0 in near:
+            dist = math.hypot(px - cx, py - cy)
+            if dist < radius and dist < d0:
+                return d - step
+        d += step
+    return horizon
+
+
+def guard_speed(linear: float, free: float, stop_at: float = 0.01, slow_time: float = 0.4,
+                min_speed: float = 0.03) -> float:
+    """`linear`, slowed so the robot stops `stop_at` meters before the first thing in its way:
+    at most the speed that covers the free distance in `slow_time` seconds, and 0 below
+    `min_speed`."""
+    allowed = (free - stop_at) / slow_time
+    if allowed < min_speed:
+        return 0.0
+    return math.copysign(min(abs(linear), allowed), linear)
+
+
+# Some things are too low for the lidar to see (the dock, in the sim). Running into one shows as
+# the wheels saying the robot moved while the lidar sees everything stay where it was.
+
+STALL_TRAVEL = 0.12  # how far odometry must say it drove before judging, in meters
+_STALL_CELL = 0.03
+
+
+def stalled(history: list, linear: float) -> bool:
+    """Whether the robot is pushing against something. `history` holds (odom x, y, yaw, lidar
+    points on the robot from `nearby_points`), oldest first. Looks back to where odometry says it
+    drove `STALL_TRAVEL` in the direction of `linear` (without turning much), and asks which fits
+    the lidar better: that it drove there, or that it never moved."""
+    if len(history) < 2:
+        return False
+    x1, y1, yaw1, now = history[-1]
+    for x0, y0, yaw0, then in reversed(history[:-1]):
+        turn = math.remainder(yaw1 - yaw0, 2 * math.pi)
+        if abs(turn) > 0.1:
+            return False  # turning: no verdict
+        c, s = math.cos(yaw0), math.sin(yaw0)
+        dx, dy = c * (x1 - x0) + s * (y1 - y0), -s * (x1 - x0) + c * (y1 - y0)
+        if dx * math.copysign(1.0, linear) >= STALL_TRAVEL:
+            break
+    else:
+        return False  # hasn't driven far enough yet
+    if len(now) < 20:
+        return False  # too little in view to judge by
+    seen = {(math.floor(px / _STALL_CELL), math.floor(py / _STALL_CELL)) for px, py in then}
+
+    def matches(points) -> int:
+        n = 0
+        for px, py in points:
+            i, j = math.floor(px / _STALL_CELL), math.floor(py / _STALL_CELL)
+            if any((i + a, j + b) in seen for a in (-1, 0, 1) for b in (-1, 0, 1)):
+                n += 1
+        return n
+
+    c, s = math.cos(turn), math.sin(turn)
+    still = matches(now)
+    moved = matches([(c * px - s * py + dx, s * px + c * py + dy) for px, py in now])
+    return still >= 0.5 * len(now) and still - moved >= 0.2 * len(now)
 
 
 def binary_frame(kind: int, header: dict, payload: bytes) -> bytes:

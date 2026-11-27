@@ -48,6 +48,14 @@ Drive with **W A S D** or the **arrow keys** (hold to move, let go to stop, Spac
 the on-screen arrows. The slider sets the top speed. Driving by hand while the robot is driving
 itself somewhere stops that, so you can always take over.
 
+Driving by hand slows down and stops a few centimeters short of anything the lidar sees in the
+way, and stops when the robot turns out to be pushing against something too low for the lidar
+(like the dock behind where it starts): the page says so. Turning is always allowed, and so is
+driving the other way. This matters for the map: pushing against something makes the wheels
+spin in place, so the wheel odometry says the robot is moving when it isn't, and SLAM can lose
+track of where it is for good (walls drawn twice, map cells outside the walls). If that ever
+happens, **New map** starts over.
+
 **Top** shows the whole apartment:
 
 ![Top view of the apartment](images/web-ui-top.jpg)

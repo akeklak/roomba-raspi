@@ -19,7 +19,9 @@ the ROS thread through `in_ros`.
 """
 
 import asyncio
+import collections
 import json
+import math
 import queue
 import threading
 import time
@@ -50,6 +52,10 @@ LATCHED_ONE = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
 
 # Streams a page only gets while it asks for them (they are the heaviest).
 OPTIONAL_STREAMS = ('camera', 'costmap')
+# How far ahead hand driving looks for obstacles (enough to slow down from top speed), in meters.
+DRIVE_HORIZON = 0.3
+# Older than this, the lidar has stopped and hand driving isn't held back.
+SCAN_MAX_AGE = 0.5
 
 
 class Client:
@@ -87,6 +93,10 @@ class WebBridge(Node):
         self.max_linear = p('max_linear', 0.5).value
         self.max_angular = p('max_angular', 2.0).value
         self.map_frame = p('map_frame', 'map').value
+        # Hand driving stops this far short of what the lidar sees (see protocol.free_travel).
+        self.base_frame = p('base_frame', 'base_footprint').value
+        self.robot_radius = p('robot_radius', 0.17).value
+        self.drive_margin = p('drive_margin', 0.02).value
         camera_topic = p('camera_topic', '/camera/image_raw').value
         camera_info_topic = p('camera_info_topic', '/camera/camera_info').value
 
@@ -100,6 +110,12 @@ class WebBridge(Node):
         self.wanted = set()        # optional streams at least one page wants
         self.driving = False
         self.last_drive = 0.0
+        self.obstacles = (0.0, [])  # (when, lidar hits near the robot), from the newest scan
+        self.odom_pose = None       # (x, y, yaw) from the newest /odom
+        # (odom x, y, yaw, lidar points) per scan for the last 2.5 s, to tell when it's stuck
+        self.motion = collections.deque(maxlen=25)
+        self.stuck = None           # (direction it can't drive, yaw then) after it got stuck
+        self.last_blocked_notice = 0.0
 
         self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.initial_pose_pub = self.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
@@ -200,9 +216,23 @@ class WebBridge(Node):
 
     def on_scan(self, msg: LaserScan) -> None:
         self.to_pages('scan', json.dumps(protocol.scan(msg)))
+        pose = protocol.static_pose(self.static_transforms, msg.header.frame_id, self.base_frame)
+        if pose is None:
+            self.get_logger().warn(
+                f'no fixed transform from {msg.header.frame_id} to {self.base_frame} yet, '
+                'so driving by hand does not stop for obstacles', once=True)
+            return
+        reach = self.robot_radius + self.drive_margin + DRIVE_HORIZON + 0.05
+        now = time.monotonic()
+        self.obstacles = (now, protocol.nearby_points(msg, pose, reach))
+        if self.odom_pose is not None:
+            self.motion.append((*self.odom_pose, protocol.nearby_points(msg, pose, 4.0, every=3)))
 
     def on_odom(self, msg: Odometry) -> None:
         self.to_pages('odom', json.dumps(protocol.odom(msg)))
+        p, q = msg.pose.pose.position, msg.pose.pose.orientation
+        yaw = math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
+        self.odom_pose = (p.x, p.y, yaw)
 
     def on_world(self, msg: MarkerArray) -> None:
         self.latch('world', protocol.world(msg))
@@ -437,10 +467,10 @@ class WebBridge(Node):
         op = msg.get('op') if isinstance(msg, dict) else None
         if op == 'drive':
             linear, angular = protocol.clamp_drive(msg, self.max_linear, self.max_angular)
-            cmd = Twist()
-            cmd.linear.x = linear
-            cmd.angular.z = angular
             moving = linear != 0.0 or angular != 0.0
+            cmd = Twist()
+            cmd.linear.x = self.guard(linear, angular)
+            cmd.angular.z = angular
             if self.nav_active():
                 if not moving:
                     # Letting go of the keys while Nav2 drives: leave the wheels to Nav2.
@@ -472,6 +502,39 @@ class WebBridge(Node):
             command = msg.get('command')
             if command in protocol.MAP_COMMANDS:
                 self.in_ros(lambda: self.map_command(command))
+
+    def guard(self, linear: float, angular: float) -> float:
+        """`linear`, slowed or stopped so the robot doesn't push against things: what the lidar
+        sees in its way, and anything it turns out to be stuck against."""
+        now = time.monotonic()
+        when, points = self.obstacles
+        if linear == 0.0 or now - when > SCAN_MAX_AGE:
+            return linear  # no fresh scan (lidar off?): drive as asked
+        way = 'ahead' if linear > 0 else 'behind'
+        if self.stuck is not None:
+            # Stays stuck that way until it drives the other way or turns a little.
+            direction, yaw = self.stuck
+            pose = self.odom_pose
+            turned = pose is not None and abs(math.remainder(pose[2] - yaw, 2 * math.pi)) > 0.35
+            if direction != (linear > 0) or turned:
+                self.stuck = None
+        if self.stuck is None:
+            history = list(self.motion)  # a copy: the ROS thread adds to it
+            if protocol.stalled(history, linear):
+                self.stuck = (linear > 0, history[-1][2])
+                self.get_logger().info(f'the robot is stuck against something {way}')
+        if self.stuck is not None:
+            allowed = 0.0
+            why = f'the robot is pushing against something {way} it that the lidar can\'t see'
+        else:
+            free = protocol.free_travel(points, linear, angular, self.robot_radius + self.drive_margin,
+                                        self.robot_radius - 0.02, DRIVE_HORIZON)
+            allowed = protocol.guard_speed(linear, free)
+            why = f'something is in the way {way}'
+        if allowed == 0.0 and now - self.last_blocked_notice > 3.0:
+            self.last_blocked_notice = now
+            self.notice(f'Stopped: {why}. Turn or drive the other way.')
+        return allowed
 
     def update_wanted(self) -> None:
         self.wanted = set().union(*(c.wants for c in self.pages)) if self.pages else set()

@@ -104,3 +104,90 @@ def test_nav_errors_in_plain_words():
     assert protocol.nav_error(999, 'odd failure') == 'odd failure'
     assert protocol.nav_error(999) == 'Nav2 error 999'
     assert 'stuck' in protocol.nav_error(0)
+
+
+def static_tf(parent, child, t, yaw=0.0):
+    return {'parent': parent, 'child': child, 't': t, 'q': list(protocol.yaw_quaternion(yaw)), 'static': True}
+
+
+def test_static_pose_chains_fixed_transforms():
+    static = {
+        'base_link': static_tf('base_footprint', 'base_link', [0, 0, 0.03]),
+        'lidar': static_tf('base_link', 'lidar', [-0.02, 0.01, 0.1], yaw=math.pi / 2),
+    }
+    xx, xy, yx, yy, x, y = protocol.static_pose(static, '/lidar', 'base_footprint')
+    assert (x, y) == (-0.02, 0.01)
+    # The lidar's x axis points along the robot's y axis.
+    assert abs(xx) < 1e-9 and abs(yx - 1) < 1e-9 and abs(xy + 1) < 1e-9 and abs(yy) < 1e-9
+    assert protocol.static_pose(static, 'camera', 'base_footprint') is None
+    assert protocol.static_pose(static, 'base_footprint', 'base_footprint') == (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+
+
+def test_nearby_points_keeps_close_hits_on_the_robot():
+    scan = NS(angle_min=0.0, angle_increment=math.pi / 2, range_min=0.05, range_max=8.0,
+              ranges=[0.3, float('inf'), 2.0, 0.01])
+    pts = protocol.nearby_points(scan, (1.0, 0.0, 0.0, 1.0, -0.02, 0.0), reach=0.5)
+    assert len(pts) == 1 and abs(pts[0][0] - 0.28) < 1e-9 and abs(pts[0][1]) < 1e-9
+
+
+def test_free_travel_stops_at_a_wall_but_lets_you_back_away():
+    wall = [(0.30, y / 100) for y in range(-30, 31, 2)]  # a wall 30 cm in front of the center
+    ahead = protocol.free_travel(wall, 0.3, 0.0, 0.19, 0.15, 0.3)
+    assert abs(ahead - 0.11) < 0.011
+    assert protocol.free_travel(wall, -0.3, 0.0, 0.19, 0.15, 0.3) == 0.3
+    assert protocol.free_travel(wall, 0.0, 1.0, 0.19, 0.15, 0.3) == 0.3
+    # Already touching it: can't go on, can still back away.
+    touching = [(0.18, y / 100) for y in range(-30, 31, 2)]
+    assert protocol.free_travel(touching, 0.3, 0.0, 0.19, 0.15, 0.3) == 0.0
+    assert protocol.free_travel(touching, -0.3, 0.0, 0.19, 0.15, 0.3) == 0.3
+
+
+def test_free_travel_follows_the_turn():
+    # A post beside the robot on its left: straight on misses it, curving left runs into it.
+    post = [(0.15, 0.25)]
+    assert protocol.free_travel(post, 0.3, 0.0, 0.19, 0.15, 0.3) == 0.3
+    assert protocol.free_travel(post, 0.3, 1.5, 0.19, 0.15, 0.3) < 0.2
+    assert protocol.free_travel(post, 0.3, -1.5, 0.19, 0.15, 0.3) == 0.3
+    # Points inside the robot's own body are ignored.
+    assert protocol.free_travel([(0.05, 0.0)], 0.3, 0.0, 0.19, 0.15, 0.3) == 0.3
+
+
+def test_guard_speed_slows_then_stops():
+    assert protocol.guard_speed(0.5, 0.3) == 0.5
+    assert abs(protocol.guard_speed(0.5, 0.11) - 0.25) < 1e-9
+    assert abs(protocol.guard_speed(-0.5, 0.11) + 0.25) < 1e-9
+    assert protocol.guard_speed(0.3, 0.02) == 0.0
+    assert protocol.guard_speed(0.3, 0.0) == 0.0
+
+
+def room_points(x, y):
+    """What a lidar at (x, y) facing +x sees of a 4 x 2 m room centered on the origin."""
+    pts = []
+    for k in range(-40, 41):
+        pts += [(2.0 - x, k / 40 - y), (-2.0 - x, k / 40 - y)]           # end walls
+        pts += [(2 * k / 40 - x, 1.0 - y), (2 * k / 40 - x, -1.0 - y)]   # side walls
+    return pts
+
+
+def test_stalled_when_the_wheels_turn_but_the_view_stays():
+    view = room_points(0, 0)
+    # Odometry and lidar agree it drove 15 cm forward: fine.
+    drove = [(0.0, 0.0, 0.0, view), (0.15, 0.0, 0.0, room_points(0.15, 0))]
+    assert not protocol.stalled(drove, 0.3)
+    # Odometry says 15 cm forward but the lidar sees the same room from the same spot: stuck.
+    stuck = [(0.0, 0.0, 0.0, view), (0.15, 0.0, 0.0, view)]
+    assert protocol.stalled(stuck, 0.3)
+    # Backwards too, along the robot's heading (here facing +y in the odom frame).
+    assert protocol.stalled([(0.0, 0.0, math.pi / 2, view), (0.0, -0.15, math.pi / 2, view)], -0.3)
+    assert not protocol.stalled([(0.0, 0.0, math.pi / 2, view), (0.0, -0.15, math.pi / 2, room_points(-0.15, 0))], -0.3)
+    # Not far enough yet, turning, or the other way: no verdict.
+    assert not protocol.stalled([(0.0, 0.0, 0.0, view), (0.05, 0.0, 0.0, view)], 0.3)
+    assert not protocol.stalled([(0.0, 0.0, 0.0, view), (0.15, 0.0, 0.3, view)], 0.3)
+    assert not protocol.stalled(stuck, -0.3)
+    assert not protocol.stalled(stuck[:1], 0.3)
+
+
+def test_not_stalled_driving_down_a_hallway():
+    # Only walls alongside: both answers fit, so it doesn't call it stuck.
+    hall = [(k / 20, 0.5) for k in range(-20, 61)] + [(k / 20, -0.5) for k in range(-20, 61)]
+    assert not protocol.stalled([(0.0, 0.0, 0.0, hall), (0.15, 0.0, 0.0, hall)], 0.3)

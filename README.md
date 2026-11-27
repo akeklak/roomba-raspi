@@ -57,7 +57,8 @@ projected in 3D in front of the robot. Drive with W A S D, the arrow keys or the
 or click **Go to** and a spot on the map and it drives there by itself. The Map panel makes,
 saves and switches maps. It talks to ROS through our web bridge (`ros2_ws/src/roomba_web`) on
 port 8765, which both the sim and the robot launch. If the page stops sending drive commands
-(tab closed, wifi dropped), the bridge stops the robot.
+(tab closed, wifi dropped), the bridge stops the robot. Driving by hand stops short of what the
+lidar sees in the way, and stops when the robot is pushing against something it can't see.
 
 To use it with the real robot, run just the UI on your laptop (`./scripts/sim.sh ui`) and open
 `http://localhost:8080/?ws=ws://roomba.local:8765`.

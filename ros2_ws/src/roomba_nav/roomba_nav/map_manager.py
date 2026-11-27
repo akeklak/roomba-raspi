@@ -351,14 +351,27 @@ class MapManager(Node):
             return None
         return Time.from_msg(t.header.stamp)
 
+    def is_current(self, stamp: Time) -> bool:
+        try:
+            t = self.tf_buffer.lookup_transform(self.odom_frame, self.base_frame, Time())
+        except TransformException:
+            return True  # no odometry to compare with: don't hold things up
+        return Time.from_msg(t.header.stamp) - stamp < Duration(seconds=0.5)
+
     def wait_until_placed(self, previous: Optional[Time]) -> bool:
-        """Waits for a map -> odom transform newer than `previous`, i.e. from the process just
-        started rather than the one before it. Nav2 can't drive until there is one."""
+        """Waits until the process just started (not the one before it: newer than `previous`)
+        has kept a map -> odom transform up to date for a second. Nav2 can't drive until then.
+        (Right after it starts, SLAM can stall for a while on its first scan, especially when it
+        loads a saved map, and then its transform goes stale and a goal fails at once.)"""
         end = time.monotonic() + self.ready_timeout
+        first = None
         while time.monotonic() < end and self.child.running():
             stamp = self.map_odom_stamp()
             if stamp is not None and (previous is None or stamp > previous):
-                return True
+                if first is None:
+                    first = stamp
+                if stamp - first >= Duration(seconds=1.0) and self.is_current(stamp):
+                    return True
             time.sleep(0.2)
         return False
 
