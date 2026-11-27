@@ -59,8 +59,9 @@ Check: the wheels turn the right way and `/odom` changes as it moves.
 
 Check:
 - `ros2 topic hz /scan` shows about 10 Hz.
-- In Foxglove (desktop app or app.foxglove.dev), open a connection to `ws://roomba.local:8765`,
-  add a 3D panel, and see the scan around the robot. Wave a hand near the lidar to confirm.
+- **(laptop)** In the repo, run `./scripts/sim.sh ui` and open
+  `http://localhost:8080/?ws=ws://roomba.local:8765`. You should see the robot with the scan
+  around it. Wave a hand near the lidar to confirm. (Foxglove at `ws://roomba.local:8765` works too.)
 
 ## 6. Power from the Roomba
 

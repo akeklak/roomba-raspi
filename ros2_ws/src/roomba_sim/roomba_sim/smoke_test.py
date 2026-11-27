@@ -13,7 +13,9 @@ import rclpy
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Image, LaserScan
+from visualization_msgs.msg import MarkerArray
 
 EXPECTED_BEAMS = 455
 
@@ -25,9 +27,15 @@ class SmokeTest(Node):
         self.scan = None
         self.image = None
         self.odom = None
+        self.world = None
+        self.truth = None
         self.create_subscription(LaserScan, '/scan', lambda m: setattr(self, 'scan', m), 10)
         self.create_subscription(Image, '/camera/image_raw', lambda m: setattr(self, 'image', m), 10)
         self.create_subscription(Odometry, '/odom', lambda m: setattr(self, 'odom', m), 10)
+        self.create_subscription(Odometry, '/ground_truth/odom', lambda m: setattr(self, 'truth', m), 10)
+        latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                             reliability=ReliabilityPolicy.RELIABLE)
+        self.create_subscription(MarkerArray, '/sim/world', lambda m: setattr(self, 'world', m), latched)
         self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
 
     def spin_for(self, seconds: float) -> None:
@@ -46,7 +54,8 @@ def run(timeout: float = 90.0) -> list:
     node = SmokeTest()
     failures = []
     try:
-        for attr, topic in (('odom', '/odom'), ('scan', '/scan'), ('image', '/camera/image_raw')):
+        for attr, topic in (('odom', '/odom'), ('scan', '/scan'), ('image', '/camera/image_raw'),
+                            ('world', '/sim/world'), ('truth', '/ground_truth/odom')):
             if not node.wait_for(attr, timeout):
                 failures.append(f'no message on {topic} within {timeout:.0f} s')
         if failures:
@@ -60,6 +69,10 @@ def run(timeout: float = 90.0) -> list:
         if hits < beams // 2:
             failures.append(f'only {hits} of {beams} lidar beams hit something; walls missing?')
         print(f'camera: {node.image.width}x{node.image.height}, frame {node.image.header.frame_id}')
+        shapes = len(node.world.markers)
+        print(f'world: {shapes} shapes for the web UI')
+        if shapes < 10:
+            failures.append(f'/sim/world has only {shapes} shapes; is the world file parsed?')
 
         start_x = node.odom.pose.pose.position.x
         cmd = Twist()

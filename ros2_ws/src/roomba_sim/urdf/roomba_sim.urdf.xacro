@@ -171,6 +171,15 @@
     <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
       <topic>/joint_states</topic>
     </plugin>
+    <!-- Where the robot really is in the world (no wheel slip), for ground_truth_localizer. -->
+    <plugin filename="gz-sim-odometry-publisher-system" name="gz::sim::systems::OdometryPublisher">
+      <odom_frame>world</odom_frame>
+      <robot_base_frame>base_footprint</robot_base_frame>
+      <odom_topic>/ground_truth/odom</odom_topic>
+      <tf_topic>/ground_truth/tf</tf_topic>
+      <odom_publish_frequency>20</odom_publish_frequency>
+      <dimensions>2</dimensions>
+    </plugin>
   </gazebo>
 
   <gazebo reference="ldlidar_link">
