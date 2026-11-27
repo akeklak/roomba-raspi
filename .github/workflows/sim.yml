@@ -12,13 +12,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Install the web bridge's Python packages
+        run: apt-get update && apt-get install -y --no-install-recommends python3-websockets python3-pil
       - name: Launch the simulation and check sensors and driving
         shell: bash
         env:
           REPO_DIR: ${{ github.workspace }}
         run: |
           bash docker/entrypoint.sh bash -c '
-            ros2 launch roomba_sim sim.launch.py use_foxglove:=false > /tmp/sim.log 2>&1 &
+            ros2 launch roomba_sim sim.launch.py > /tmp/sim.log 2>&1 &
             ros2 run roomba_sim smoke_test
             rc=$?
             if [ $rc -ne 0 ]; then tail -50 /tmp/sim.log; fi

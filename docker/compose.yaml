@@ -8,7 +8,7 @@ services:
     volumes:
       - ..:/repo
     ports:
-      - "8765:8765"   # Foxglove bridge
+      - "8765:8765"   # our web bridge: the websocket the web UI connects to
     environment:
       - ROS_DOMAIN_ID=0
       # Keep ROS traffic inside the container.
@@ -16,3 +16,9 @@ services:
     command: ros2 launch roomba_sim sim.launch.py
     stdin_open: true
     tty: true
+
+  ui:
+    build: ../web
+    image: roomba-raspi-ui
+    ports:
+      - "8080:80"     # the web UI: open http://localhost:8080

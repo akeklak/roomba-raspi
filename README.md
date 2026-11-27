@@ -23,26 +23,41 @@ docs/hardware.md          parts, serial pinout, battery-tap wiring, mounting
 docs/bringup.md           day-one bring-up checklist
 docs/simulation.md        running the Gazebo simulation on a Mac or Linux machine
 docker/                   simulation image (ROS 2 Jazzy + Gazebo Harmonic) and compose file
-scripts/sim.sh            up / teleop / shell / down for the simulation
+web/                      the 3D web UI (React + three.js), served at http://localhost:8080
+scripts/sim.sh            up / teleop / shell / down for the simulation and web UI
 scripts/setup_pi.sh       installs ROS 2 Jazzy + drivers on Ubuntu 24.04 and builds the workspace
 scripts/99-roomba-raspi.rules   udev rules for /dev/roomba and /dev/ldlidar
 systemd/                  optional service to start the robot at boot
 ros2_ws/roomba.repos      third-party drivers (create_robot, libcreate, ldrobot-lidar-ros2)
 ros2_ws/src/roomba_bringup
-  launch/robot.launch.py  Roomba driver + lidar + robot model + power guard + Foxglove bridge
+  launch/robot.launch.py  Roomba driver + lidar + robot model + power guard + web bridge
   config/                 driver, lidar and power-guard parameters
   urdf/roomba.urdf.xacro  robot model with lidar and camera frames
   roomba_bringup/power_guard.py   powers the Pi off before it drains the Roomba battery
-ros2_ws/src/roomba_sim    Gazebo robot model, apartment world, ROS bridge, smoke test
+ros2_ws/src/roomba_web    web bridge: ROS topics to the browser and drive commands back
+ros2_ws/src/roomba_sim    Gazebo robot model, apartment world, ROS bridge, world markers for the UI, smoke test
 ```
 
 ## Simulation (no hardware needed)
 
 ```bash
-./scripts/sim.sh up      # Gazebo in Docker; view and drive in Foxglove at ws://localhost:8765
+./scripts/sim.sh up      # Gazebo + the web UI in Docker; open http://localhost:8080
 ```
 
 See `docs/simulation.md`. The simulated robot publishes the same topics as the real one.
+
+## Web UI
+
+A full 3D view in the browser: the robot, the room around it (in the sim), the lidar scan and
+everything it has seen so far, the path driven, and the camera, both in a window and projected
+in 3D in front of the robot. Drive with W A S D, the arrow keys or the on-screen pad. It talks
+to ROS through our web bridge (`ros2_ws/src/roomba_web`) on port 8765, which both the sim and
+the robot launch. If the page stops sending drive commands (tab closed, wifi dropped), the
+bridge stops the robot.
+
+To use it with the real robot, run just the UI on your laptop (`./scripts/sim.sh ui`) and open
+`http://localhost:8080/?ws=ws://roomba.local:8765`.
+To work on the UI itself: `cd web && npm install && npm run dev` (hot reload at port 8080).
 
 ## Quick start (on the Pi)
 

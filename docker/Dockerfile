@@ -11,12 +11,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-${ROS_DISTRO}-ros-gz \
       ros-${ROS_DISTRO}-xacro \
       ros-${ROS_DISTRO}-robot-state-publisher \
-      ros-${ROS_DISTRO}-foxglove-bridge \
       ros-${ROS_DISTRO}-teleop-twist-keyboard \
       ros-${ROS_DISTRO}-slam-toolbox \
       ros-${ROS_DISTRO}-navigation2 \
       ros-${ROS_DISTRO}-nav2-bringup \
       python3-pytest \
+      python3-websockets python3-pil \
       libegl1 libgl1-mesa-dri \
     && rm -rf /var/lib/apt/lists/*
 

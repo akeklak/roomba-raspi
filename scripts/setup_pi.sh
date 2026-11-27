@@ -46,8 +46,9 @@ sudo apt-get install -y \
   ros-${ROS_DISTRO}-nav2-lifecycle-manager \
   ros-${ROS_DISTRO}-nav2-util \
   ros-${ROS_DISTRO}-diagnostic-updater \
-  ros-${ROS_DISTRO}-foxglove-bridge \
   ros-${ROS_DISTRO}-slam-toolbox \
+  python3-websockets \
+  python3-pil \
   libudev-dev
 
 # shellcheck disable=SC1090

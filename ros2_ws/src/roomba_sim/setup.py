@@ -25,6 +25,8 @@ setup(
     entry_points={
         'console_scripts': [
             'smoke_test = roomba_sim.smoke_test:main',
+            'world_markers = roomba_sim.world_markers:main',
+            'ground_truth_localizer = roomba_sim.ground_truth_localizer:main',
         ],
     },
 )
