@@ -9,19 +9,21 @@ jobs:
   smoke-test:
     runs-on: ubuntu-24.04
     container: osrf/ros:jazzy-desktop-full
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      - name: Install the web bridge's Python packages
-        run: apt-get update && apt-get install -y --no-install-recommends python3-websockets python3-pil
-      - name: Launch the simulation and check sensors and driving
+      - name: Install the web bridge's Python packages, slam_toolbox and Nav2
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends python3-websockets python3-pil \
+            ros-jazzy-slam-toolbox ros-jazzy-navigation2
+      - name: Launch the simulation; check sensors and driving, then mapping and navigation
         shell: bash
         env:
           REPO_DIR: ${{ github.workspace }}
         run: |
           bash docker/entrypoint.sh bash -c '
             ros2 launch roomba_sim sim.launch.py > /tmp/sim.log 2>&1 &
-            ros2 run roomba_sim smoke_test
+            ros2 run roomba_sim smoke_test && timeout 1500 ros2 run roomba_nav nav_test
             rc=$?
-            if [ $rc -ne 0 ]; then tail -50 /tmp/sim.log; fi
+            if [ $rc -ne 0 ]; then grep -v "Timed out waiting for transform" /tmp/sim.log | tail -80; fi
             exit $rc'

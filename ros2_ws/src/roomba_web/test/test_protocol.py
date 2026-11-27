@@ -57,3 +57,50 @@ def test_clamp_drive():
     assert protocol.clamp_drive({'linear': 'fast'}, 0.5, 2.0) == (0.0, 0.0)
     assert protocol.clamp_drive({'linear': float('nan')}, 0.5, 2.0) == (0.0, 0.0)
     assert protocol.clamp_drive({}, 0.5, 2.0) == (0.0, 0.0)
+
+
+def test_grid_frame_packs_header_and_compressed_cells():
+    import zlib
+    q = NS(x=0.0, y=0.0, z=0.0, w=1.0)
+    msg = NS(header=header('/map'), info=NS(width=3, height=2, resolution=0.05,
+                                            origin=NS(position=NS(x=-1.0, y=2.0, z=0.0), orientation=q)),
+             data=[0, 100, -1, 0, 50, -1])
+    out = protocol.grid_frame(msg, 'map')
+    assert out[0] == protocol.GRID_FRAME
+    (n,) = struct.unpack('<I', out[1:5])
+    head = json.loads(out[5:5 + n])
+    assert head['kind'] == 'map' and head['frame'] == 'map'
+    assert (head['width'], head['height'], head['resolution']) == (3, 2, 0.05)
+    assert head['origin']['x'] == -1.0 and head['origin']['q'] == [0.0, 0.0, 0.0, 1.0]
+    assert list(zlib.decompress(out[5 + n:])) == [0, 100, 255, 0, 50, 255]
+
+
+def test_path_is_thinned_but_keeps_the_end():
+    poses = [NS(pose=NS(position=NS(x=i * 0.01, y=0.0, z=0.0))) for i in range(101)]
+    out = protocol.path(NS(header=header('map'), poses=poses))
+    assert out['op'] == 'plan' and out['frame'] == 'map'
+    assert len(out['points']) < 30
+    assert out['points'][0] == [0.0, 0.0] and out['points'][-1] == [1.0, 0.0]
+    assert protocol.path(NS(header=header('map'), poses=[]))['points'] == []
+
+
+def test_parse_pose_accepts_numbers_only():
+    assert protocol.parse_pose({'x': 1, 'y': '2.5', 'yaw': 0.5}) == (1.0, 2.5, 0.5)
+    assert protocol.parse_pose({'x': 1, 'y': 2}) == (1.0, 2.0, 0.0)
+    assert protocol.parse_pose({'x': 1}) is None
+    assert protocol.parse_pose({'x': 'a', 'y': 2}) is None
+    assert protocol.parse_pose({'x': float('nan'), 'y': 2}) is None
+    assert protocol.parse_pose({'x': None, 'y': 2}) is None
+
+
+def test_yaw_quaternion():
+    x, y, z, w = protocol.yaw_quaternion(math.pi / 2)
+    assert (x, y) == (0.0, 0.0)
+    assert abs(z - math.sqrt(0.5)) < 1e-9 and abs(w - math.sqrt(0.5)) < 1e-9
+
+
+def test_nav_errors_in_plain_words():
+    assert protocol.nav_error(208) == 'there is no way through to that spot'
+    assert protocol.nav_error(999, 'odd failure') == 'odd failure'
+    assert protocol.nav_error(999) == 'Nav2 error 999'
+    assert 'stuck' in protocol.nav_error(0)

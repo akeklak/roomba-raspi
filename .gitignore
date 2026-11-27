@@ -4,6 +4,8 @@ ros2_ws/install/
 ros2_ws/log/
 # third-party sources fetched by vcs (see ros2_ws/roomba.repos)
 ros2_ws/src/third_party/
+# maps saved by the sim (see docs/simulation.md)
+maps/
 # python
 __pycache__/
 *.pyc

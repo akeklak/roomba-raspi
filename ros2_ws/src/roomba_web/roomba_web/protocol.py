@@ -12,21 +12,42 @@ Text frames are JSON objects with an "op" field:
     world     {shapes: [{key, frame, kind, position, quaternion, size, color}]}
     battery   {charge}
     charging  {state}
-Binary frames are camera pictures: one byte 1, a little-endian uint32 header length, a JSON
-header {frame, stamp, width, height, model}, then the JPEG.
+    mapping   map_manager's state: {mode, busy, message, error, extending, map_name, saved}
+    nav       {state, goal: {x, y, yaw, frame} | null, distance, eta, recoveries, message}
+              state is idle | starting | active | succeeded | canceled | failed
+    plan      {frame, points: [[x, y], ...]}      the path Nav2 is following (empty when done)
+    notice    {level: info | error, text}         the answer to a map command
+Binary frames start with one byte saying what they are, then a little-endian uint32 header
+length and a JSON header:
+    1  camera picture: header {frame, stamp, width, height, model}, then the JPEG
+    2  grid (the map, or Nav2's costmap): header {kind: map | costmap, frame, stamp, width,
+       height, resolution, origin: {x, y, z, q: [x, y, z, w]}}, then the cells compressed with
+       zlib: one byte per cell, row by row from the origin corner, 0..100 = free..occupied,
+       255 = unknown
 
 The UI sends:
-    drive     {linear, angular}   repeated while driving; the robot stops if they stop coming
-    camera    {enabled}           whether this page wants camera pictures
+    drive        {linear, angular}   repeated while driving; the robot stops if they stop coming.
+                                     Driving also cancels a navigation goal (you took over).
+    camera       {enabled}           whether this page wants camera pictures
+    costmap      {enabled}           whether this page wants Nav2's costmap
+    goal         {x, y, yaw}         drive to this pose on the map
+    cancel       {}                  stop navigating
+    initial_pose {x, y, yaw}         "the robot is here": corrects localization on a saved map
+    map_command  {command}           save_map | use_saved_map | new_map | extend_map
 """
 
+import array
 import io
 import json
 import math
 import struct
+import zlib
 from typing import Optional
 
 CAMERA_FRAME = 1
+GRID_FRAME = 2
+
+MAP_COMMANDS = ('save_map', 'use_saved_map', 'new_map', 'extend_map')
 
 # visualization_msgs/Marker types and actions.
 _CUBE, _CYLINDER, _ADD = 1, 3, 0
@@ -155,3 +176,94 @@ def clamp_drive(cmd: dict, max_linear: float, max_angular: float) -> tuple:
     if not (math.isfinite(linear) and math.isfinite(angular)):
         return 0.0, 0.0
     return (max(-max_linear, min(max_linear, linear)), max(-max_angular, min(max_angular, angular)))
+
+
+def binary_frame(kind: int, header: dict, payload: bytes) -> bytes:
+    head = json.dumps(header).encode()
+    return bytes([kind]) + struct.pack('<I', len(head)) + head + payload
+
+
+def cell_bytes(data) -> bytes:
+    """OccupancyGrid cells (int8, -1 = unknown) as raw bytes, so -1 becomes 255."""
+    if isinstance(data, (bytes, bytearray)):
+        return bytes(data)
+    if isinstance(data, array.array) and data.typecode == 'b':
+        return data.tobytes()
+    return bytes(int(v) & 0xFF for v in data)
+
+
+def grid_frame(msg, kind: str) -> bytes:
+    """A nav_msgs/OccupancyGrid (the map or a costmap) as a binary frame (see the top)."""
+    info = msg.info
+    o = info.origin
+    header = {
+        'kind': kind,
+        'frame': frame(msg.header.frame_id),
+        'stamp': stamp(msg.header),
+        'width': info.width,
+        'height': info.height,
+        'resolution': info.resolution,
+        'origin': {
+            'x': o.position.x, 'y': o.position.y, 'z': o.position.z,
+            'q': [o.orientation.x, o.orientation.y, o.orientation.z, o.orientation.w],
+        },
+    }
+    return binary_frame(GRID_FRAME, header, zlib.compress(cell_bytes(msg.data), 1))
+
+
+def path(msg, min_step: float = 0.05) -> dict:
+    """A nav_msgs/Path, thinned to a point every `min_step` meters (always keeping the last)."""
+    points = []
+    poses = list(msg.poses)
+    for i, ps in enumerate(poses):
+        p = ps.pose.position
+        if points and i < len(poses) - 1 and math.hypot(p.x - points[-1][0], p.y - points[-1][1]) < min_step:
+            continue
+        points.append([_r(p.x, 3), _r(p.y, 3)])
+    return {'op': 'plan', 'frame': frame(msg.header.frame_id), 'points': points}
+
+
+def seconds(duration) -> float:
+    return duration.sec + duration.nanosec * 1e-9
+
+
+def parse_pose(msg: dict) -> Optional[tuple]:
+    """(x, y, yaw) from a goal or initial_pose message, or None if it isn't three finite numbers."""
+    try:
+        x, y, yaw = float(msg['x']), float(msg['y']), float(msg.get('yaw', 0.0))
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not all(math.isfinite(v) for v in (x, y, yaw)):
+        return None
+    return x, y, yaw
+
+
+# Nav2's error codes (nav2_msgs FollowPath 1xx, ComputePathToPose 2xx) in plain words.
+NAV_ERRORS = {
+    102: 'it lost track of where it is on the map',
+    104: 'it stopped making progress',
+    105: 'it stopped making progress',
+    106: 'it found no safe way to move',
+    107: 'driving took too long',
+    202: 'it does not know where it is on the map yet',
+    203: 'the robot is off the map',
+    204: 'that spot is off the map',
+    205: 'the robot is too close to something to plan from there',
+    206: 'that spot is too close to a wall or furniture',
+    207: 'planning took too long',
+    208: 'there is no way through to that spot',
+}
+
+
+def nav_error(code: int, detail: str = '') -> str:
+    """Why a goal failed, for the page."""
+    if code in NAV_ERRORS:
+        return NAV_ERRORS[code]
+    if detail:
+        return detail
+    return f'Nav2 error {code}' if code else 'no route found, or it got stuck'
+
+
+def yaw_quaternion(yaw: float) -> tuple:
+    """(x, y, z, w) for a rotation of `yaw` about Z."""
+    return (0.0, 0.0, math.sin(yaw / 2.0), math.cos(yaw / 2.0))

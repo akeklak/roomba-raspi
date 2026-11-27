@@ -9,6 +9,7 @@ import { useStore } from './store';
 import { CameraWindow } from './ui/CameraWindow';
 import { DrivePad } from './ui/DrivePad';
 import { LayersPanel } from './ui/LayersPanel';
+import { MapPanel, ToolHint } from './ui/MapPanel';
 import { ConnectionHelp, StatusPanel } from './ui/StatusPanel';
 
 export function App() {
@@ -31,14 +32,22 @@ export function App() {
     robot.data.setCameraEnabled(s.cameraPip || s.camera3d);
   }, [robot, s.cameraPip, s.camera3d]);
 
+  useEffect(() => {
+    robot.data.setCostmapEnabled(s.costmap);
+  }, [robot, s.costmap]);
+
   return (
     <RobotContext.Provider value={robot}>
       <div className="app">
         <Scene />
         <div className="overlay">
-          <StatusPanel />
+          <div className="left-stack">
+            <StatusPanel />
+            <MapPanel />
+          </div>
           <LayersPanel />
           <ConnectionHelp />
+          <ToolHint />
           {s.cameraPip ? <CameraWindow /> : null}
           <DrivePad />
         </div>

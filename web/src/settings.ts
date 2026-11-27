@@ -5,6 +5,12 @@ export type ViewMode = 'follow' | 'free' | 'top' | 'chase';
 
 export type Settings = {
   walls: WallMode;
+  /** The map (from SLAM, or the saved one). */
+  map: boolean;
+  /** Nav2's costmap: obstacles grown by the robot's size. */
+  costmap: boolean;
+  /** The path Nav2 plans to the goal. */
+  plan: boolean;
   scan: boolean;
   memory: boolean;
   trail: boolean;
@@ -17,6 +23,9 @@ export type Settings = {
 
 const DEFAULTS: Settings = {
   walls: 'cut',
+  map: true,
+  costmap: false,
+  plan: true,
   scan: true,
   memory: true,
   trail: true,

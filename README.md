@@ -21,7 +21,7 @@ Interface). Everything runs from the Roomba's own battery and charges on its doc
 ```
 docs/hardware.md          parts, serial pinout, battery-tap wiring, mounting
 docs/bringup.md           day-one bring-up checklist
-docs/simulation.md        running the Gazebo simulation on a Mac or Linux machine
+docs/simulation.md        running the Gazebo simulation, and making maps and navigating in it
 docker/                   simulation image (ROS 2 Jazzy + Gazebo Harmonic) and compose file
 web/                      the 3D web UI (React + three.js), served at http://localhost:8080
 scripts/sim.sh            up / teleop / shell / down for the simulation and web UI
@@ -30,11 +30,14 @@ scripts/99-roomba-raspi.rules   udev rules for /dev/roomba and /dev/ldlidar
 systemd/                  optional service to start the robot at boot
 ros2_ws/roomba.repos      third-party drivers (create_robot, libcreate, ldrobot-lidar-ros2)
 ros2_ws/src/roomba_bringup
-  launch/robot.launch.py  Roomba driver + lidar + robot model + power guard + web bridge
+  launch/robot.launch.py  Roomba driver + lidar + robot model + power guard + web bridge + mapping and navigation
   config/                 driver, lidar and power-guard parameters
   urdf/roomba.urdf.xacro  robot model with lidar and camera frames
   roomba_bringup/power_guard.py   powers the Pi off before it drains the Roomba battery
-ros2_ws/src/roomba_web    web bridge: ROS topics to the browser and drive commands back
+ros2_ws/src/roomba_web    web bridge: ROS topics to the browser, and drive commands, goals and map buttons back
+ros2_ws/src/roomba_nav    mapping (slam_toolbox), localization (AMCL) and navigation (Nav2)
+  roomba_nav/map_manager.py  switches between mapping and navigating on the saved map; saves and loads maps
+  config/                 slam_toolbox and Nav2 settings
 ros2_ws/src/roomba_sim    Gazebo robot model, apartment world, ROS bridge, world markers for the UI, smoke test
 ```
 
@@ -48,12 +51,13 @@ See `docs/simulation.md`. The simulated robot publishes the same topics as the r
 
 ## Web UI
 
-A full 3D view in the browser: the robot, the room around it (in the sim), the lidar scan and
-everything it has seen so far, the path driven, and the camera, both in a window and projected
-in 3D in front of the robot. Drive with W A S D, the arrow keys or the on-screen pad. It talks
-to ROS through our web bridge (`ros2_ws/src/roomba_web`) on port 8765, which both the sim and
-the robot launch. If the page stops sending drive commands (tab closed, wifi dropped), the
-bridge stops the robot.
+A full 3D view in the browser: the robot, the room around it (in the sim), the map, the lidar
+scan and everything it has seen so far, the path driven, and the camera, both in a window and
+projected in 3D in front of the robot. Drive with W A S D, the arrow keys or the on-screen pad,
+or click **Go to** and a spot on the map and it drives there by itself. The Map panel makes,
+saves and switches maps. It talks to ROS through our web bridge (`ros2_ws/src/roomba_web`) on
+port 8765, which both the sim and the robot launch. If the page stops sending drive commands
+(tab closed, wifi dropped), the bridge stops the robot.
 
 To use it with the real robot, run just the UI on your laptop (`./scripts/sim.sh ui`) and open
 `http://localhost:8080/?ws=ws://roomba.local:8765`.
@@ -67,7 +71,7 @@ cd ~/roomba-raspi && ./scripts/setup_pi.sh
 ros2 launch roomba_bringup robot.launch.py
 ```
 
-See `docs/bringup.md` for the full first-time checklist.
+See `docs/bringup.md` for the full first-time checklist, then step 9 there to map the apartment.
 
 ## Topics (phase 1)
 
@@ -81,10 +85,27 @@ See `docs/bringup.md` for the full first-time checklist.
 | `/battery/charge_ratio`, `/battery/charging_state` | std_msgs/Float32, create_msgs/ChargingState | create_driver |
 | `/dock`, `/undock` | std_msgs/Empty | → create_driver (seek dock / leave dock) |
 
+## Topics (phase 2)
+
+| Name | Type | From |
+| --- | --- | --- |
+| `/map` | nav_msgs/OccupancyGrid | slam_toolbox while mapping, map_server on the saved map |
+| `map → odom` (tf) | | slam_toolbox while mapping, AMCL on the saved map |
+| `/map_manager/state` | std_msgs/String (JSON) | map_manager: mapping or navigating, busy, saved map |
+| `/map_manager/save_map`, `use_saved_map`, `new_map`, `extend_map` | std_srvs/Trigger | → map_manager |
+| `/navigate_to_pose` | nav2_msgs/NavigateToPose (action) | → Nav2: drive to a pose on the map |
+| `/plan` | nav_msgs/Path | Nav2's planned route |
+| `/global_costmap/costmap` | nav_msgs/OccupancyGrid | Nav2: obstacles grown by the robot's size |
+| `/initialpose` | geometry_msgs/PoseWithCovarianceStamped | → AMCL: where the robot really is |
+
 ## Tests
 
-The power-guard logic has plain pytest tests that run without ROS:
+Plain pytest tests that run without ROS (power guard, sim world, web bridge messages, saved maps):
 
 ```bash
-cd ros2_ws/src/roomba_bringup && python3 -m pytest test
+for p in roomba_bringup roomba_sim roomba_web roomba_nav; do (cd ros2_ws/src/$p && python3 -m pytest -q test); done
+cd web && npm test
 ```
+
+With the sim running, `ros2 run roomba_sim smoke_test` and `ros2 run roomba_nav nav_test` check it
+end to end (CI runs both; see `docs/simulation.md`).

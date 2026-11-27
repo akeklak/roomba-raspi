@@ -33,6 +33,7 @@ export type MessageHandler = (msg: Message) => void;
 
 const RECONNECT_MS = 2000;
 const CAMERA_FRAME = 1;
+const GRID_FRAME = 2;
 
 /** Splits a binary camera frame: [1][uint32 LE header length][JSON header][JPEG]. */
 export function parseCameraFrame(data: ArrayBuffer): CameraMessage | null {
@@ -42,6 +43,14 @@ export function parseCameraFrame(data: ArrayBuffer): CameraMessage | null {
   if (5 + length > bytes.length) return null;
   const header = JSON.parse(new TextDecoder().decode(bytes.subarray(5, 5 + length))) as CameraHeader;
   return { op: 'camera', header, jpeg: new Blob([bytes.subarray(5 + length)], { type: 'image/jpeg' }) };
+}
+
+/** Binary frames: camera pictures, or grids (the map, the costmap) that RobotData decodes. */
+function parseBinary(data: ArrayBuffer): Message | null {
+  const kind = new Uint8Array(data, 0, Math.min(1, data.byteLength))[0];
+  if (kind === CAMERA_FRAME) return parseCameraFrame(data);
+  if (kind === GRID_FRAME) return { op: 'grid', data };
+  return null;
 }
 
 export class RobotConnection {
@@ -100,7 +109,7 @@ export class RobotConnection {
     ws.onmessage = (event) => {
       let msg: Message | null = null;
       try {
-        msg = typeof event.data === 'string' ? (JSON.parse(event.data) as Message) : parseCameraFrame(event.data);
+        msg = typeof event.data === 'string' ? (JSON.parse(event.data) as Message) : parseBinary(event.data);
       } catch (err) {
         console.warn('Bad message from the robot', err);
       }
