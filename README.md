@@ -21,6 +21,9 @@ Interface). Everything runs from the Roomba's own battery and charges on its doc
 ```
 docs/hardware.md          parts, serial pinout, battery-tap wiring, mounting
 docs/bringup.md           day-one bring-up checklist
+docs/simulation.md        running the Gazebo simulation on a Mac or Linux machine
+docker/                   simulation image (ROS 2 Jazzy + Gazebo Harmonic) and compose file
+scripts/sim.sh            up / teleop / shell / down for the simulation
 scripts/setup_pi.sh       installs ROS 2 Jazzy + drivers on Ubuntu 24.04 and builds the workspace
 scripts/99-roomba-raspi.rules   udev rules for /dev/roomba and /dev/ldlidar
 systemd/                  optional service to start the robot at boot
@@ -30,7 +33,16 @@ ros2_ws/src/roomba_bringup
   config/                 driver, lidar and power-guard parameters
   urdf/roomba.urdf.xacro  robot model with lidar and camera frames
   roomba_bringup/power_guard.py   powers the Pi off before it drains the Roomba battery
+ros2_ws/src/roomba_sim    Gazebo robot model, apartment world, ROS bridge, smoke test
 ```
+
+## Simulation (no hardware needed)
+
+```bash
+./scripts/sim.sh up      # Gazebo in Docker; view and drive in Foxglove at ws://localhost:8765
+```
+
+See `docs/simulation.md`. The simulated robot publishes the same topics as the real one.
 
 ## Quick start (on the Pi)
 
