@@ -1,5 +1,4 @@
 import { useRobot } from '../context';
-import { TOPICS } from '../ros/robotData';
 import { useStore } from '../store';
 
 const CHARGING = ['Not charging', 'Reconditioning', 'Full charge', 'Trickle charge', 'Waiting', 'Charge fault'];
@@ -19,7 +18,7 @@ export function StatusPanel() {
   const { connection, data } = useRobot();
   const info = useStore(connection.info);
   const status = useStore(data.status);
-  const isSim = TOPICS.world in info.topics || '/clock' in info.topics;
+  const isSim = info.sim;
   const label =
     info.status === 'connected' ? (isSim ? 'Connected to the sim' : 'Connected to the robot') : info.status === 'connecting' ? 'Connecting…' : 'Not connected';
   return (

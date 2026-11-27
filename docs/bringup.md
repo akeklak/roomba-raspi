@@ -61,7 +61,7 @@ Check:
 - `ros2 topic hz /scan` shows about 10 Hz.
 - **(laptop)** In the repo, run `./scripts/sim.sh ui` and open
   `http://localhost:8080/?ws=ws://roomba.local:8765`. You should see the robot with the scan
-  around it. Wave a hand near the lidar to confirm. (Foxglove at `ws://roomba.local:8765` works too.)
+  around it. Wave a hand near the lidar to confirm.
 
 ## 6. Power from the Roomba
 

@@ -1,6 +1,4 @@
-import { encodeTwist } from '../ros/cdr';
 import type { RobotConnection } from '../ros/connection';
-import { TOPICS } from '../ros/robotData';
 
 /** [forward, turn], each -1..1. Turn is positive to the left (counterclockwise), like ROS. */
 export type DriveInput = [number, number];
@@ -15,8 +13,9 @@ export function driveCommand([forward, turn]: DriveInput, speed: number): { line
 }
 
 /**
- * Sends /cmd_vel while a key or on-screen button is held, ten times a second, and stops the robot
- * as soon as everything is released (or the page loses focus).
+ * Sends drive commands while a key or on-screen button is held, ten times a second, and stops the
+ * robot as soon as everything is released (or the page loses focus). The bridge also stops the
+ * robot by itself if these commands stop arriving, e.g. when the tab is closed.
  */
 export class DriveController {
   private keys = new Set<string>();
@@ -79,11 +78,7 @@ export class DriveController {
       this.stopsLeft--;
     }
     const { linear, angular } = driveCommand(input, this.speed);
-    this.connection.publish(
-      TOPICS.cmdVel,
-      'geometry_msgs/msg/Twist',
-      encodeTwist({ x: linear, y: 0, z: 0 }, { x: 0, y: 0, z: angular }),
-    );
+    this.connection.send({ op: 'drive', linear, angular });
   }
 }
 

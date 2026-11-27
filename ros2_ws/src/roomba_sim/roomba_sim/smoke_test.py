@@ -1,10 +1,14 @@
 """Checks that a running simulation behaves like the robot: sensors publish and it drives.
+It also checks the web bridge: a page connecting to ws://localhost:8765 gets the world, the
+lidar and the transforms, and can drive the robot.
 
     ros2 run roomba_sim smoke_test        (with sim.launch.py already running)
 
 Exits 0 on success, 1 on failure. Used by CI.
 """
 
+import asyncio
+import json
 import math
 import sys
 import time
@@ -87,8 +91,52 @@ def run(timeout: float = 90.0) -> list:
         print(f'drove {moved:.2f} m forward in 3 s at 0.3 m/s')
         if moved < 0.4:
             failures.append(f'robot moved only {moved:.2f} m on /cmd_vel (expected about 0.9 m)')
+
+        failures += check_web_bridge(node)
     finally:
         node.destroy_node()
+    return failures
+
+
+async def _web_bridge_session(node: SmokeTest, url: str) -> tuple:
+    import websockets  # only needed for this check
+
+    seen = set()
+    start_x = node.odom.pose.pose.position.x
+    async with websockets.connect(url, max_size=None) as ws:
+        end = time.monotonic() + 15
+        while time.monotonic() < end and not {'hello', 'world', 'scan', 'tf'} <= seen:
+            try:
+                raw = await asyncio.wait_for(ws.recv(), timeout=1.0)
+            except asyncio.TimeoutError:
+                continue
+            if isinstance(raw, str):
+                seen.add(json.loads(raw).get('op'))
+        # Drive forward through the bridge for 2 s, as the page does (10 commands a second).
+        for _ in range(20):
+            await ws.send(json.dumps({'op': 'drive', 'linear': 0.3, 'angular': 0.0}))
+            node.spin_for(0.1)
+        # Then go quiet: the bridge's watchdog should stop the robot by itself.
+    node.spin_for(1.5)
+    moved = node.odom.pose.pose.position.x - start_x
+    speed = node.odom.twist.twist.linear.x
+    return seen, moved, speed
+
+
+def check_web_bridge(node: SmokeTest, url: str = 'ws://localhost:8765') -> list:
+    try:
+        seen, moved, speed = asyncio.run(_web_bridge_session(node, url))
+    except Exception as e:  # noqa: BLE001 - report any failure to connect as a test failure
+        return [f'web bridge at {url}: {e!r}']
+    print(f'web bridge: got {sorted(seen)}, drove {moved:.2f} m, speed after stopping {speed:.2f} m/s')
+    failures = []
+    missing = {'hello', 'world', 'scan', 'tf'} - seen
+    if missing:
+        failures.append(f'web bridge never sent {sorted(missing)}')
+    if moved < 0.25:
+        failures.append(f'driving through the web bridge moved only {moved:.2f} m (expected about 0.6 m)')
+    if abs(speed) > 0.05:
+        failures.append(f'robot still moving at {speed:.2f} m/s after drive commands stopped')
     return failures
 
 

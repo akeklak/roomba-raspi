@@ -6,7 +6,7 @@
   drivers runs unchanged:
     /cmd_vel in, /odom, /tf (odom -> base_footprint), /joint_states, /scan,
     /camera/image_raw and /camera/camera_info out.
-  Geometry is plain shapes (no meshes) so Foxglove can draw it without extra files.
+  Geometry is plain shapes (no meshes) to keep the sim light.
   Dimensions follow the Roomba 600 / Create 2: 0.34 m across, wheels 0.235 m apart, 72 mm wheels.
 -->
 <robot name="roomba_sim" xmlns:xacro="http://ros.org/wiki/xacro">

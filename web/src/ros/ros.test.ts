@@ -1,36 +1,28 @@
-import { parse } from '@foxglove/rosmsg';
-import { MessageReader } from '@foxglove/rosmsg2-serialization';
 import { Matrix4, Quaternion, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 
 import { driveCommand } from '../ui/drive';
-import { encodeTwist } from './cdr';
-import { imageToRgba } from './image';
+import { parseCameraFrame } from './connection';
 import { scanToPoints } from './scan';
 import { TfTree } from './tf';
 import { VoxelMemory } from './voxels';
 
-const TWIST = `geometry_msgs/Vector3 linear
-geometry_msgs/Vector3 angular
-================================================================================
-MSG: geometry_msgs/Vector3
-float64 x
-float64 y
-float64 z`;
-
 const yaw = (a: number) => new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), a);
 const at = (m: Matrix4) => new Vector3().setFromMatrixPosition(m);
 
-describe('encodeTwist', () => {
-  it('round-trips through the ROS 2 CDR reader', () => {
-    const bytes = encodeTwist({ x: 0.3, y: 0, z: 0 }, { x: 0, y: 0, z: -1.25 });
-    expect(bytes.length).toBe(52);
-    const msg = new MessageReader(parse(TWIST, { ros2: true })).readMessage<{
-      linear: { x: number };
-      angular: { z: number };
-    }>(bytes);
-    expect(msg.linear.x).toBeCloseTo(0.3);
-    expect(msg.angular.z).toBeCloseTo(-1.25);
+describe('parseCameraFrame', () => {
+  it('splits the header from the JPEG', () => {
+    const header = new TextEncoder().encode(JSON.stringify({ frame: 'cam', stamp: 1, width: 2, height: 1, model: null }));
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff]);
+    const buf = new Uint8Array(5 + header.length + jpeg.length);
+    buf[0] = 1;
+    new DataView(buf.buffer).setUint32(1, header.length, true);
+    buf.set(header, 5);
+    buf.set(jpeg, 5 + header.length);
+    const msg = parseCameraFrame(buf.buffer)!;
+    expect(msg.header.frame).toBe('cam');
+    expect(msg.jpeg.size).toBe(3);
+    expect(parseCameraFrame(new Uint8Array([2, 0, 0, 0, 0]).buffer)).toBeNull();
   });
 });
 
@@ -72,12 +64,13 @@ describe('scanToPoints', () => {
     const toFixed = new Matrix4().makeTranslation(1, 2, 0.1);
     const { positions, ranges } = scanToPoints(
       {
-        header: { frame_id: 'l', stamp: { sec: 0, nanosec: 0 } },
+        frame: 'l',
+        stamp: 0,
         angle_min: 0,
         angle_increment: Math.PI / 2,
         range_min: 0.05,
         range_max: 10,
-        ranges: [1, Infinity, 2, 0.01],
+        ranges: [1, null, 2, 0.01],
       },
       toFixed,
     );
@@ -96,15 +89,6 @@ describe('VoxelMemory', () => {
     expect(mem.count).toBe(2);
     // The first cell was overwritten, so it counts as new again.
     expect(mem.add([0.01, 0.01, 0])).toBe(1);
-  });
-});
-
-describe('imageToRgba', () => {
-  it('converts bgr8 with row padding', () => {
-    const data = new Uint8Array([3, 2, 1, 9, /* pad */ 6, 5, 4, 9]);
-    const out = imageToRgba({ header: { frame_id: '' }, width: 1, height: 2, encoding: 'bgr8', step: 4, data });
-    expect([...out!]).toEqual([1, 2, 3, 255, 4, 5, 6, 255]);
-    expect(imageToRgba({ header: { frame_id: '' }, width: 1, height: 1, encoding: '16UC1', step: 2, data })).toBeNull();
   });
 });
 

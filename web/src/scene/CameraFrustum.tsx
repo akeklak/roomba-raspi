@@ -1,6 +1,6 @@
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef, useState } from 'react';
-import { BufferAttribute, BufferGeometry, DataTexture, LineBasicMaterial, LineSegments, RGBAFormat, SRGBColorSpace } from 'three';
+import { BufferAttribute, BufferGeometry, LineBasicMaterial, LineSegments, SRGBColorSpace, Texture } from 'three';
 import type { Mesh, MeshBasicMaterial } from 'three';
 
 import { useRobot } from '../context';
@@ -57,7 +57,7 @@ function Picture({ model }: { model: CameraModel }) {
     return new LineSegments(g, new LineBasicMaterial({ color: '#63b3ed', transparent: true, opacity: 0.8 }));
   }, [w, h, ox, oy]);
 
-  const texture = useRef<DataTexture | null>(null);
+  const texture = useRef<Texture | null>(null);
   const plane = useRef<Mesh>(null);
   const seen = useRef(-1);
   useFrame(() => {
@@ -65,10 +65,9 @@ function Picture({ model }: { model: CameraModel }) {
     if (!cam || cam.version === seen.current || !plane.current) return;
     seen.current = cam.version;
     let tex = texture.current;
-    if (!tex || tex.image.width !== cam.width || tex.image.height !== cam.height) {
-      tex?.dispose();
-      tex = new DataTexture(cam.rgba, cam.width, cam.height, RGBAFormat);
-      // Row 0 is the top of the picture, which is -y in the optical frame: no flip needed.
+    if (!tex) {
+      // Row 0 of the picture is its top, which is -y in the optical frame: no flip needed.
+      tex = new Texture(cam.image);
       tex.flipY = false;
       tex.colorSpace = SRGBColorSpace;
       texture.current = tex;
@@ -76,7 +75,7 @@ function Picture({ model }: { model: CameraModel }) {
       mat.map = tex;
       mat.needsUpdate = true;
     } else {
-      tex.image.data = cam.rgba;
+      tex.image = cam.image;
     }
     tex.needsUpdate = true;
   });

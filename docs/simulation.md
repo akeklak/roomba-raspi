@@ -61,9 +61,6 @@ Other commands:
 ./scripts/sim.sh down      # stop
 ```
 
-The [Foxglove](https://foxglove.dev/download) app still works for poking at raw topics:
-**Open connection → Foxglove WebSocket → `ws://localhost:8765`**.
-
 Code changes under `ros2_ws/src/roomba_sim` and `web/` are picked up on the next
 `./scripts/sim.sh up`. For quick UI work, leave the sim running and start the UI with hot reload
 instead: `cd web && npm install && npm run dev` (needs Node 22), then open http://localhost:8080

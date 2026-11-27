@@ -57,7 +57,7 @@ export function DrivePad() {
   }, [drive]);
 
   const active = (p: DriveInput) => p[0] === input[0] && p[1] === input[1] && (p[0] !== 0 || p[1] !== 0);
-  const disabled = info.status !== 'connected' || !info.canPublish;
+  const disabled = info.status !== 'connected';
 
   return (
     <div className={`panel drive ${disabled ? 'disabled' : ''}`}>

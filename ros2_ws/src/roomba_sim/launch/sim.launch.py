@@ -4,7 +4,8 @@
     ros2 launch roomba_sim sim.launch.py headless:=false # with the Gazebo window (Linux desktop)
     ros2 launch roomba_sim sim.launch.py localization:=odom  # wheel odometry only, drift and all
 
-View and drive it from the web UI (http://localhost:8080), which connects to ws://localhost:8765.
+View and drive it from the web UI (http://localhost:8080), which connects to our web bridge
+at ws://localhost:8765.
 """
 
 import os
@@ -23,7 +24,7 @@ def generate_launch_description():
     share = get_package_share_directory('roomba_sim')
     world = LaunchConfiguration('world')
     headless = LaunchConfiguration('headless')
-    use_foxglove = LaunchConfiguration('use_foxglove')
+    use_web_bridge = LaunchConfiguration('use_web_bridge')
 
     # -r: start running immediately. Headless adds -s (server only) and renders sensors offscreen.
     gz_args = PythonExpression([
@@ -101,18 +102,19 @@ def generate_launch_description():
         parameters=[{'world_file': world, 'frame_id': 'world'}],
     )
 
-    foxglove_bridge = Node(
-        condition=IfCondition(use_foxglove),
-        package='foxglove_bridge',
-        executable='foxglove_bridge',
+    # Carries the topics above to the web UI and its drive commands back (roomba_web).
+    web_bridge = Node(
+        condition=IfCondition(use_web_bridge),
+        package='roomba_web',
+        executable='web_bridge',
         output='screen',
-        parameters=[{'port': 8765, 'address': '0.0.0.0', 'use_sim_time': True}],
+        parameters=[{'use_sim_time': True}],
     )
 
     return LaunchDescription([
         DeclareLaunchArgument('world', default_value=os.path.join(share, 'worlds', 'apartment.sdf')),
         DeclareLaunchArgument('headless', default_value='true'),
-        DeclareLaunchArgument('use_foxglove', default_value='true'),
+        DeclareLaunchArgument('use_web_bridge', default_value='true'),
         DeclareLaunchArgument('localization', default_value='ground_truth',
                               choices=['ground_truth', 'odom'],
                               description='Where world -> odom comes from (see above)'),
@@ -127,5 +129,5 @@ def generate_launch_description():
         ground_truth_localizer,
         world_to_odom,
         world_markers,
-        foxglove_bridge,
+        web_bridge,
     ])

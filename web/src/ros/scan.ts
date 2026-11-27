@@ -1,12 +1,15 @@
 import type { Matrix4 } from 'three';
 
 export type LaserScan = {
-  header: { frame_id: string; stamp: { sec: number; nanosec: number } };
+  frame: string;
+  /** Seconds. */
+  stamp: number;
   angle_min: number;
   angle_increment: number;
   range_min: number;
   range_max: number;
-  ranges: ArrayLike<number>;
+  /** null where the beam hit nothing. */
+  ranges: ArrayLike<number | null>;
 };
 
 /**
@@ -21,7 +24,7 @@ export function scanToPoints(scan: LaserScan, toFixed: Matrix4): { positions: Fl
   let count = 0;
   for (let i = 0; i < n; i++) {
     const r = scan.ranges[i];
-    if (!Number.isFinite(r) || r < scan.range_min || r > scan.range_max) continue;
+    if (r === null || !Number.isFinite(r) || r < scan.range_min || r > scan.range_max) continue;
     const a = scan.angle_min + i * scan.angle_increment;
     const x = r * Math.cos(a);
     const y = r * Math.sin(a);

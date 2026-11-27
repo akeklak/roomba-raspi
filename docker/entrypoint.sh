@@ -7,7 +7,7 @@ source "/opt/ros/${ROS_DISTRO}/setup.bash"
 REPO_DIR="${REPO_DIR:-/repo}"
 if [[ -d "$REPO_DIR/ros2_ws/src" ]]; then
   cd "$REPO_DIR/ros2_ws"
-  colcon --log-base /ws/log build --symlink-install --packages-select roomba_sim \
+  colcon --log-base /ws/log build --symlink-install --packages-select roomba_web roomba_sim \
     --build-base /ws/build --install-base /ws/install \
     --event-handlers console_cohesion- summary- > /tmp/colcon.log 2>&1 \
     || { cat /tmp/colcon.log; exit 1; }

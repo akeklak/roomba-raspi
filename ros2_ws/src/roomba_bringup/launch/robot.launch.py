@@ -1,4 +1,4 @@
-"""Bring up the whole robot base: Roomba driver, lidar, robot model, power guard, Foxglove bridge.
+"""Bring up the whole robot base: Roomba driver, lidar, robot model, power guard, web bridge.
 
 Usage on the Pi:
     ros2 launch roomba_bringup robot.launch.py
@@ -25,7 +25,7 @@ def generate_launch_description():
     roomba_port = LaunchConfiguration('roomba_port')
     lidar_port = LaunchConfiguration('lidar_port')
     use_lidar = LaunchConfiguration('use_lidar')
-    use_foxglove = LaunchConfiguration('use_foxglove')
+    use_web_bridge = LaunchConfiguration('use_web_bridge')
     use_power_guard = LaunchConfiguration('use_power_guard')
 
     robot_description = ParameterValue(
@@ -88,15 +88,13 @@ def generate_launch_description():
         parameters=[cfg('power_guard.yaml')],
     )
 
-    # Lets Foxglove (app or foxglove.dev in a browser) show the scan, TF and robot model
-    # at ws://<pi-address>:8765 until our own web UI exists.
-    foxglove_bridge = Node(
-        condition=IfCondition(use_foxglove),
-        package='foxglove_bridge',
-        executable='foxglove_bridge',
-        name='foxglove_bridge',
+    # Our web UI connects here (ws://<pi-address>:8765) to see the robot and drive it.
+    web_bridge = Node(
+        condition=IfCondition(use_web_bridge),
+        package='roomba_web',
+        executable='web_bridge',
+        name='web_bridge',
         output='screen',
-        parameters=[{'port': 8765}],
     )
 
     return LaunchDescription([
@@ -105,12 +103,12 @@ def generate_launch_description():
         DeclareLaunchArgument('lidar_port', default_value='/dev/ldlidar',
                               description='Serial device of the LD19 lidar adapter'),
         DeclareLaunchArgument('use_lidar', default_value='true'),
-        DeclareLaunchArgument('use_foxglove', default_value='true'),
+        DeclareLaunchArgument('use_web_bridge', default_value='true'),
         DeclareLaunchArgument('use_power_guard', default_value='true'),
         robot_state_publisher,
         create_driver,
         lidar_container,
         lidar_lifecycle,
         power_guard,
-        foxglove_bridge,
+        web_bridge,
     ])

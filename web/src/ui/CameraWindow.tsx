@@ -22,7 +22,7 @@ export function CameraWindow() {
         c.width = cam.width;
         c.height = cam.height;
       }
-      c.getContext('2d')?.putImageData(new ImageData(cam.rgba as Uint8ClampedArray<ArrayBuffer>, cam.width, cam.height), 0, 0);
+      c.getContext('2d')?.drawImage(cam.image, 0, 0);
       setHasImage(true);
     };
     draw();

@@ -1,13 +1,9 @@
-import { parse } from '@foxglove/rosmsg';
-import { MessageReader } from '@foxglove/rosmsg2-serialization';
-import { FoxgloveClient } from '@foxglove/ws-protocol';
-import type { Channel } from '@foxglove/ws-protocol';
-
 import { Store } from '../store';
 
 /**
- * Talks to the robot (or the sim) through foxglove_bridge, the websocket server that runs next to
- * ROS on port 8765. The bridge only moves bytes; this class decodes the ROS 2 (CDR) messages.
+ * Talks to the robot (or the sim) through our web bridge (ros2_ws/src/roomba_web), a websocket
+ * server on port 8765. Text frames are JSON objects with an "op" field; binary frames are camera
+ * pictures. The format is described in roomba_web/protocol.py.
  */
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
@@ -15,40 +11,49 @@ export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
 export type ConnectionInfo = {
   url: string;
   status: ConnectionStatus;
-  /** Topic name -> ROS type, for everything the robot currently publishes. */
-  topics: Record<string, string>;
-  /** Latest server clock (sim time when the robot uses it), in seconds. */
+  /** True when connected to the simulation. */
+  sim: boolean;
+  /** The robot's clock (sim time in the sim), in seconds. */
   serverTime: number | null;
-  canPublish: boolean;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type MessageHandler = (msg: any) => void;
+export type CameraHeader = {
+  frame: string;
+  stamp: number;
+  width: number;
+  height: number;
+  model: { fx: number; fy: number; cx: number; cy: number; width: number; height: number } | null;
+};
 
-type Subscription = { subscriptionId: number; channel: Channel; reader: MessageReader };
+export type CameraMessage = { op: 'camera'; header: CameraHeader; jpeg: Blob };
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type Message = { op: string; [key: string]: any };
+export type MessageHandler = (msg: Message) => void;
 
 const RECONNECT_MS = 2000;
+const CAMERA_FRAME = 1;
+
+/** Splits a binary camera frame: [1][uint32 LE header length][JSON header][JPEG]. */
+export function parseCameraFrame(data: ArrayBuffer): CameraMessage | null {
+  const bytes = new Uint8Array(data);
+  if (bytes.length < 5 || bytes[0] !== CAMERA_FRAME) return null;
+  const length = new DataView(data).getUint32(1, true);
+  if (5 + length > bytes.length) return null;
+  const header = JSON.parse(new TextDecoder().decode(bytes.subarray(5, 5 + length))) as CameraHeader;
+  return { op: 'camera', header, jpeg: new Blob([bytes.subarray(5 + length)], { type: 'image/jpeg' }) };
+}
 
 export class RobotConnection {
   readonly info: Store<ConnectionInfo>;
 
-  private client: FoxgloveClient | null = null;
-  private channels = new Map<string, Channel>();
-  private subscriptions = new Map<string, Subscription>();
-  private bySubscriptionId = new Map<number, Subscription>();
+  private ws: WebSocket | null = null;
   private handlers = new Map<string, Set<MessageHandler>>();
-  private publishers = new Map<string, number>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
 
   constructor(readonly url: string) {
-    this.info = new Store<ConnectionInfo>({
-      url,
-      status: 'disconnected',
-      topics: {},
-      serverTime: null,
-      canPublish: false,
-    });
+    this.info = new Store<ConnectionInfo>({ url, status: 'disconnected', sim: false, serverTime: null });
   }
 
   connect(): void {
@@ -59,134 +64,58 @@ export class RobotConnection {
   close(): void {
     this.closed = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    this.client?.close();
-    this.client = null;
+    this.ws?.close();
+    this.ws = null;
   }
 
-  /** Calls `handler` for every message on `topic`. Returns a function that stops it. */
-  on(topic: string, handler: MessageHandler): () => void {
-    let set = this.handlers.get(topic);
+  /** Calls `handler` for every message with this op. Returns a function that stops it. */
+  on(op: string, handler: MessageHandler): () => void {
+    let set = this.handlers.get(op);
     if (!set) {
       set = new Set();
-      this.handlers.set(topic, set);
+      this.handlers.set(op, set);
     }
     set.add(handler);
-    this.syncSubscription(topic);
-    return () => {
-      set.delete(handler);
-      this.syncSubscription(topic);
-    };
+    return () => set.delete(handler);
   }
 
-  /** Publishes already-encoded CDR bytes. Returns false when not connected. */
-  publish(topic: string, schemaName: string, cdr: Uint8Array): boolean {
-    const client = this.client;
-    if (!client || this.info.get().status !== 'connected') return false;
-    let id = this.publishers.get(topic);
-    if (id === undefined) {
-      id = client.advertise({ topic, encoding: 'cdr', schemaName });
-      this.publishers.set(topic, id);
-    }
-    client.sendMessage(id, cdr);
+  /** Sends a JSON message to the bridge. Returns false when not connected. */
+  send(msg: Message): boolean {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    ws.send(JSON.stringify(msg));
     return true;
+  }
+
+  private emit(msg: Message): void {
+    this.handlers.get(msg.op)?.forEach((h) => h(msg));
   }
 
   private open(): void {
     this.info.update({ status: 'connecting' });
-    const ws = new WebSocket(this.url, [FoxgloveClient.SUPPORTED_SUBPROTOCOL]);
-    const client = new FoxgloveClient({ ws });
-    this.client = client;
+    const ws = new WebSocket(this.url);
+    ws.binaryType = 'arraybuffer';
+    this.ws = ws;
 
-    client.on('open', () => this.info.update({ status: 'connected' }));
-    client.on('serverInfo', (info) => {
-      this.info.update({ canPublish: info.capabilities.includes('clientPublish') });
-    });
-    client.on('time', (t) => this.info.update({ serverTime: Number(t.timestamp) * 1e-9 }));
-    client.on('advertise', (channels) => {
-      for (const ch of channels) {
-        if (!this.channels.has(ch.topic)) this.channels.set(ch.topic, ch);
-      }
-      this.publishTopicList();
-      for (const ch of channels) this.syncSubscription(ch.topic);
-    });
-    client.on('unadvertise', (ids) => {
-      for (const [topic, ch] of this.channels) {
-        if (!ids.includes(ch.id)) continue;
-        this.channels.delete(topic);
-        const sub = this.subscriptions.get(topic);
-        if (sub) {
-          this.bySubscriptionId.delete(sub.subscriptionId);
-          this.subscriptions.delete(topic);
-        }
-      }
-      this.publishTopicList();
-    });
-    client.on('message', ({ subscriptionId, data }) => {
-      const sub = this.bySubscriptionId.get(subscriptionId);
-      if (!sub) return;
-      let msg: unknown;
+    ws.onmessage = (event) => {
+      let msg: Message | null = null;
       try {
-        msg = sub.reader.readMessage(data);
+        msg = typeof event.data === 'string' ? (JSON.parse(event.data) as Message) : parseCameraFrame(event.data);
       } catch (err) {
-        console.warn(`Could not decode ${sub.channel.topic}`, err);
-        return;
+        console.warn('Bad message from the robot', err);
       }
-      this.handlers.get(sub.channel.topic)?.forEach((h) => h(msg));
-    });
-    client.on('error', () => {
-      /* followed by close */
-    });
-    client.on('close', () => {
-      if (this.client !== client) return;
-      this.client = null;
-      this.channels.clear();
-      this.subscriptions.clear();
-      this.bySubscriptionId.clear();
-      this.publishers.clear();
-      this.info.update({ status: 'disconnected', topics: {}, canPublish: false });
+      if (!msg) return;
+      if (msg.op === 'hello') this.info.update({ status: 'connected', sim: Boolean(msg.sim) });
+      else if (msg.op === 'status') this.info.update({ serverTime: msg.time });
+      this.emit(msg);
+    };
+    ws.onclose = () => {
+      if (this.ws !== ws) return;
+      this.ws = null;
+      this.info.update({ status: 'disconnected', serverTime: null });
+      this.emit({ op: 'disconnected' });
       if (!this.closed) this.reconnectTimer = setTimeout(() => this.open(), RECONNECT_MS);
-    });
-  }
-
-  private publishTopicList(): void {
-    const topics: Record<string, string> = {};
-    for (const [topic, ch] of this.channels) topics[topic] = ch.schemaName;
-    this.info.update({ topics });
-  }
-
-  /** Subscribes while someone is listening and the topic exists; unsubscribes otherwise. */
-  private syncSubscription(topic: string): void {
-    const client = this.client;
-    const wanted = (this.handlers.get(topic)?.size ?? 0) > 0;
-    const sub = this.subscriptions.get(topic);
-    if (!client) return;
-    if (!wanted && sub) {
-      client.unsubscribe(sub.subscriptionId);
-      this.subscriptions.delete(topic);
-      this.bySubscriptionId.delete(sub.subscriptionId);
-      return;
-    }
-    const channel = this.channels.get(topic);
-    if (!wanted || sub || !channel) return;
-    const reader = makeReader(channel);
-    if (!reader) return;
-    const subscriptionId = client.subscribe(channel.id);
-    const created = { subscriptionId, channel, reader };
-    this.subscriptions.set(topic, created);
-    this.bySubscriptionId.set(subscriptionId, created);
-  }
-}
-
-function makeReader(channel: Channel): MessageReader | null {
-  if (channel.encoding !== 'cdr' || (channel.schemaEncoding && channel.schemaEncoding !== 'ros2msg')) {
-    console.warn(`Skipping ${channel.topic}: unsupported encoding ${channel.encoding}/${channel.schemaEncoding}`);
-    return null;
-  }
-  try {
-    return new MessageReader(parse(channel.schema, { ros2: true }));
-  } catch (err) {
-    console.warn(`Could not parse the schema for ${channel.topic}`, err);
-    return null;
+    };
   }
 }
 

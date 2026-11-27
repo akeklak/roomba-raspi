@@ -1,29 +1,13 @@
 import { Matrix4, Quaternion, Vector3 } from 'three';
 
 import { Store } from '../store';
-import type { RobotConnection } from './connection';
-import { imageToRgba } from './image';
-import type { RosImage } from './image';
+import type { CameraMessage, Message, RobotConnection } from './connection';
 import { scanToPoints } from './scan';
 import type { LaserScan } from './scan';
 import { TfTree, cleanFrame } from './tf';
-import { toSec } from './time';
 import { VoxelMemory } from './voxels';
 
-/** Topic and frame names. The sim and the real robot use the same ones. */
-export const TOPICS = {
-  tf: '/tf',
-  tfStatic: '/tf_static',
-  scan: '/scan',
-  odom: '/odom',
-  cmdVel: '/cmd_vel',
-  image: '/camera/image_raw',
-  cameraInfo: '/camera/camera_info',
-  world: '/sim/world',
-  battery: '/battery/charge_ratio',
-  charging: '/battery/charging_state',
-} as const;
-
+/** Frame names. The sim and the real robot use the same ones. */
 export const BASE_FRAME = 'base_footprint';
 /** Preferred frames to draw everything in, best first. "world" only exists in the sim. */
 const FIXED_FRAME_PREFERENCE = ['world', 'map', 'odom'];
@@ -49,7 +33,7 @@ export type RobotStatus = {
 };
 
 export type CameraFrame = {
-  rgba: Uint8ClampedArray;
+  image: ImageBitmap;
   width: number;
   height: number;
   frame: string;
@@ -90,7 +74,10 @@ export class RobotData {
   cameraModel: CameraModel | null = null;
 
   private unsubscribe: Array<() => void> = [];
-  private cameraUnsubscribe: Array<() => void> = [];
+  private cameraWanted = false;
+  private decoding = false;
+  private pendingCamera: CameraMessage | null = null;
+  private retiredImages: ImageBitmap[] = [];
   private scanTimes: number[] = [];
   private scratch = new Matrix4();
 
@@ -99,15 +86,17 @@ export class RobotData {
   start(): void {
     const c = this.connection;
     this.unsubscribe.push(
-      c.on(TOPICS.tf, (m) => this.onTf(m, false)),
-      c.on(TOPICS.tfStatic, (m) => this.onTf(m, true)),
-      c.on(TOPICS.scan, (m) => this.onScan(m)),
-      c.on(TOPICS.odom, (m) => this.onOdom(m)),
-      c.on(TOPICS.world, (m) => this.onWorld(m)),
-      c.on(TOPICS.battery, (m) => this.status.update({ battery: m.data })),
-      c.on(TOPICS.charging, (m) => this.status.update({ chargingState: m.state })),
-      c.info.subscribe(() => {
-        if (c.info.get().status === 'disconnected') this.tf.clear();
+      c.on('hello', () => c.send({ op: 'camera', enabled: this.cameraWanted })),
+      c.on('tf', (m) => this.onTf(m)),
+      c.on('scan', (m) => this.onScan(m as unknown as LaserScan)),
+      c.on('odom', (m) => this.onOdom(m)),
+      c.on('world', (m) => this.world.set(m.shapes as WorldShape[])),
+      c.on('battery', (m) => this.status.update({ battery: m.charge })),
+      c.on('charging', (m) => this.status.update({ chargingState: m.state })),
+      c.on('camera', (m) => this.onCamera(m as CameraMessage)),
+      c.on('disconnected', () => {
+        this.tf.clear();
+        this.status.update({ scanHz: null, speed: null, turnRate: null });
       }),
     );
   }
@@ -115,20 +104,12 @@ export class RobotData {
   stop(): void {
     this.unsubscribe.forEach((u) => u());
     this.unsubscribe = [];
-    this.setCameraEnabled(false);
   }
 
-  /** The camera is the heaviest stream, so only subscribe while something shows it. */
+  /** The camera is the heaviest stream, so the robot only sends it while something shows it. */
   setCameraEnabled(enabled: boolean): void {
-    if (enabled && this.cameraUnsubscribe.length === 0) {
-      this.cameraUnsubscribe.push(
-        this.connection.on(TOPICS.image, (m) => this.onImage(m)),
-        this.connection.on(TOPICS.cameraInfo, (m) => this.onCameraInfo(m)),
-      );
-    } else if (!enabled) {
-      this.cameraUnsubscribe.forEach((u) => u());
-      this.cameraUnsubscribe = [];
-    }
+    this.cameraWanted = enabled;
+    this.connection.send({ op: 'camera', enabled });
   }
 
   fixedFrame(): string {
@@ -146,21 +127,19 @@ export class RobotData {
     this.trail.version++;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private onTf(msg: any, isStatic: boolean): void {
+  private onTf(msg: Message): void {
     const versionBefore = this.tf.version;
     let movedBase = false;
-    for (const tr of msg.transforms) {
-      const { translation: t, rotation: q } = tr.transform;
+    for (const tr of msg.transforms as TransformJson[]) {
       this.tf.set(
-        tr.header.frame_id,
-        tr.child_frame_id,
-        toSec(tr.header.stamp),
-        new Vector3(t.x, t.y, t.z),
-        new Quaternion(q.x, q.y, q.z, q.w),
-        isStatic,
+        tr.parent,
+        tr.child,
+        tr.stamp,
+        new Vector3(tr.t[0], tr.t[1], tr.t[2]),
+        new Quaternion(tr.q[0], tr.q[1], tr.q[2], tr.q[3]),
+        tr.static,
       );
-      if (cleanFrame(tr.child_frame_id) === BASE_FRAME) movedBase = true;
+      if (cleanFrame(tr.child) === BASE_FRAME) movedBase = true;
     }
     if (this.tf.version !== versionBefore) this.pickFixedFrame();
     if (movedBase) this.extendTrail();
@@ -198,7 +177,7 @@ export class RobotData {
     this.scanTimes.push(now);
     while (this.scanTimes.length > 1 && this.scanTimes[0] < now - 2000) this.scanTimes.shift();
     // Place the scan where the robot was when it was taken, so it lines up with the walls.
-    const toFixed = this.tf.lookup(this.fixedFrame(), scan.header.frame_id, toSec(scan.header.stamp), this.scratch);
+    const toFixed = this.tf.lookup(this.fixedFrame(), scan.frame, scan.stamp, this.scratch);
     if (!toFixed) return;
     const { positions, ranges } = scanToPoints(scan, toFixed);
     this.scan = { positions, ranges, version: this.scan.version + 1 };
@@ -210,53 +189,48 @@ export class RobotData {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private onOdom(msg: any): void {
-    const speed = Math.round(msg.twist.twist.linear.x * 100) / 100;
-    const turnRate = Math.round(msg.twist.twist.angular.z * 100) / 100;
+  private onOdom(msg: Message): void {
     const s = this.status.get();
-    if (speed !== s.speed || turnRate !== s.turnRate) this.status.update({ speed, turnRate });
+    if (msg.speed !== s.speed || msg.turn !== s.turnRate) this.status.update({ speed: msg.speed, turnRate: msg.turn });
   }
 
-  private onImage(msg: RosImage): void {
-    const prev = this.camera;
-    const rgba = imageToRgba(msg, prev?.rgba);
-    if (!rgba) return;
-    this.camera = {
-      rgba,
-      width: msg.width,
-      height: msg.height,
-      frame: cleanFrame(msg.header.frame_id),
-      version: (prev?.version ?? 0) + 1,
-    };
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private onCameraInfo(msg: any): void {
-    const k = msg.k as ArrayLike<number>;
-    if (!k || !k[0]) return;
-    const m = this.cameraModel;
-    if (m && m.fx === k[0] && m.width === msg.width) return;
-    this.cameraModel = { fx: k[0], fy: k[4], cx: k[2], cy: k[5], width: msg.width, height: msg.height };
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private onWorld(msg: any): void {
-    const shapes: WorldShape[] = [];
-    for (const m of msg.markers) {
-      if (m.action !== 0) continue; // ADD only
-      if (m.type !== 1 && m.type !== 3) continue; // CUBE, CYLINDER
-      const { position: p, orientation: q } = m.pose;
-      shapes.push({
-        key: `${m.ns}/${m.id}`,
-        frame: cleanFrame(m.header.frame_id),
-        kind: m.type === 1 ? 'box' : 'cylinder',
-        position: [p.x, p.y, p.z],
-        quaternion: [q.x, q.y, q.z, q.w],
-        size: [m.scale.x, m.scale.y, m.scale.z],
-        color: [m.color.r, m.color.g, m.color.b, m.color.a],
-      });
+  /** Decodes JPEG pictures one at a time; if they arrive faster, only the newest is kept. */
+  private onCamera(msg: CameraMessage): void {
+    if (msg.header.model) this.cameraModel = msg.header.model;
+    if (this.decoding) {
+      this.pendingCamera = msg;
+      return;
     }
-    this.world.set(shapes);
+    this.decoding = true;
+    createImageBitmap(msg.jpeg)
+      .then((image) => {
+        const prev = this.camera;
+        if (prev) this.retiredImages.push(prev.image);
+        // Keep the last couple around: the 3D view may not have uploaded them to the GPU yet.
+        while (this.retiredImages.length > 2) this.retiredImages.shift()?.close();
+        this.camera = {
+          image,
+          width: msg.header.width,
+          height: msg.header.height,
+          frame: cleanFrame(msg.header.frame),
+          version: (prev?.version ?? 0) + 1,
+        };
+      })
+      .catch((err) => console.warn('Could not decode a camera picture', err))
+      .finally(() => {
+        this.decoding = false;
+        const next = this.pendingCamera;
+        this.pendingCamera = null;
+        if (next) this.onCamera(next);
+      });
   }
 }
+
+type TransformJson = {
+  parent: string;
+  child: string;
+  t: [number, number, number];
+  q: [number, number, number, number];
+  stamp: number;
+  static: boolean;
+};
