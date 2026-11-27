@@ -81,9 +81,10 @@
         <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}" /></geometry>
         <material name="wheel_black" />
       </visual>
+      <!-- A sphere touches the floor at one point in the middle of the wheel. A cylinder touches
+           at its inner edge, which made the robot turn about 9% faster than its odometry said. -->
       <collision>
-        <origin rpy="${pi/2} 0 0" />
-        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}" /></geometry>
+        <geometry><sphere radius="${wheel_radius}" /></geometry>
       </collision>
       <inertial>
         <origin rpy="${pi/2} 0 0" />

@@ -84,6 +84,11 @@ const IDLE_NAV: NavState = { state: 'idle', goal: null, distance: null, eta: nul
 
 const TRAIL_CAPACITY = 20_000;
 const TRAIL_STEP = 0.02;
+/** Two samples of a moving transform further apart than this mean data was missing in between. */
+const MAX_TF_GAP_SEC = 0.5;
+/** How long a scan may wait for the transforms that place it before it's left out of the memory. */
+const MAX_MEMORY_WAIT_MS = 1000;
+const MEMORY_QUEUE_MAX = 30;
 
 /**
  * Everything the UI knows about the robot. High-rate data (transforms, scans, images) lives in
@@ -136,6 +141,8 @@ export class RobotData {
   private pendingCamera: CameraMessage | null = null;
   private retiredImages: ImageBitmap[] = [];
   private scanTimes: number[] = [];
+  /** Scans waiting for the transforms that place them, oldest first (see rememberScans). */
+  private memoryQueue: Array<{ scan: LaserScan; at: number }> = [];
   private scratch = new Matrix4();
 
   constructor(private readonly connection: RobotConnection) {}
@@ -161,6 +168,7 @@ export class RobotData {
       c.on('notice', (m) => this.notice.set({ id: ++this.noticeId, level: m.level, text: m.text, at: Date.now() })),
       c.on('disconnected', () => {
         this.tf.clear();
+        this.memoryQueue = [];
         this.status.update({ scanHz: null, speed: null, turnRate: null });
         this.nav.set(IDLE_NAV);
         this.mapping.set(null);
@@ -244,6 +252,7 @@ export class RobotData {
 
   clearMemory(): void {
     this.memory.clear();
+    this.memoryQueue = [];
     this.trail.count = 0;
     this.trail.version++;
   }
@@ -264,6 +273,7 @@ export class RobotData {
     }
     if (this.tf.version !== versionBefore) this.pickFixedFrame();
     if (movedBase) this.extendTrail();
+    this.rememberScans();
   }
 
   private pickFixedFrame(): void {
@@ -297,16 +307,41 @@ export class RobotData {
     const now = performance.now();
     this.scanTimes.push(now);
     while (this.scanTimes.length > 1 && this.scanTimes[0] < now - 2000) this.scanTimes.shift();
-    // Place the scan where the robot was when it was taken, so it lines up with the walls.
+    // Show it right away, placed with the newest data, so it moves with the robot model.
     const toFixed = this.tf.lookup(this.fixedFrame(), scan.frame, scan.stamp, this.scratch);
-    if (!toFixed) return;
-    const { positions, ranges } = scanToPoints(scan, toFixed);
-    this.scan = { positions, ranges, version: this.scan.version + 1 };
-    this.memory.add(positions);
+    if (toFixed) {
+      const { positions, ranges } = scanToPoints(scan, toFixed);
+      this.scan = { positions, ranges, version: this.scan.version + 1 };
+    }
+    this.memoryQueue.push({ scan, at: now });
+    if (this.memoryQueue.length > MEMORY_QUEUE_MAX) this.memoryQueue.shift();
+    this.rememberScans();
     if (this.scanTimes.length > 2) {
       const span = (this.scanTimes[this.scanTimes.length - 1] - this.scanTimes[0]) / 1000;
       const scanHz = Math.round(((this.scanTimes.length - 1) / span) * 10) / 10;
       if (scanHz !== this.status.get().scanHz) this.status.update({ scanHz });
+    }
+  }
+
+  /**
+   * Adds waiting scans to the memory once the robot's position at the moment each was taken is
+   * known. A scan often arrives a little before the odometry that goes with it; placing it with
+   * the position from just before (as the live scan is) puts it a few degrees off while the robot
+   * turns, and the memory would keep that forever. Scans whose position can't be known (the
+   * robot was switching maps, or the data stopped) are left out of the memory.
+   */
+  private rememberScans(): void {
+    const q = this.memoryQueue;
+    const fixed = this.fixedFrame();
+    const now = performance.now();
+    while (q.length) {
+      const { scan, at } = q[0];
+      const coverage = this.tf.coverage(fixed, scan.frame, scan.stamp, MAX_TF_GAP_SEC);
+      if (coverage === 'wait' && now - at < MAX_MEMORY_WAIT_MS) break;
+      q.shift();
+      if (coverage !== 'ok') continue;
+      const toFixed = this.tf.lookup(fixed, scan.frame, scan.stamp, this.scratch);
+      if (toFixed) this.memory.add(scanToPoints(scan, toFixed).positions);
     }
   }
 

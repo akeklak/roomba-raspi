@@ -36,6 +36,9 @@ slam_toolbox:
     use_scan_barycenter: true
     minimum_travel_distance: 0.3        # ours: every 30 cm (default 0.5 m), for small rooms
     minimum_travel_heading: 0.3         # ours: or every 17 degrees of turning (default 0.5 rad)
+    # ours: also count turning on the spot. Without this slam_toolbox only checks the distance
+    # moved, so while the robot spins in place nothing corrects the wheels' idea of its heading.
+    check_min_dist_and_heading_precisely: true
     scan_buffer_size: 10
     scan_buffer_maximum_scan_distance: 10.0
     link_match_minimum_response_fine: 0.1

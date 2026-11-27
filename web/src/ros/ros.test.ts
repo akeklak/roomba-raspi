@@ -51,6 +51,33 @@ describe('TfTree', () => {
     expect(at(tf.lookup('odom', 'base', 99)!).x).toBeCloseTo(1);
   });
 
+  it('says whether a lookup at a time would be exact, a guess, or impossible', () => {
+    const tf = new TfTree();
+    tf.set('world', 'map', 0, new Vector3(), yaw(0), true);
+    // Localization stamps map -> odom a little ahead of time.
+    tf.set('map', 'odom', 9.9, new Vector3(), yaw(0), false);
+    tf.set('map', 'odom', 10.2, new Vector3(), yaw(0), false);
+    tf.set('odom', 'base', 10.0, new Vector3(), yaw(0), false);
+    tf.set('odom', 'base', 10.05, new Vector3(), yaw(0), false);
+    tf.set('base', 'laser', 0, new Vector3(), yaw(0), true);
+    expect(tf.coverage('world', 'laser', 10.03, 0.5)).toBe('ok');
+    // The odometry for this time hasn't arrived yet.
+    expect(tf.coverage('world', 'laser', 10.08, 0.5)).toBe('wait');
+    tf.set('odom', 'base', 10.1, new Vector3(), yaw(0), false);
+    expect(tf.coverage('world', 'laser', 10.08, 0.5)).toBe('ok');
+    // Only the transforms between the two frames count: map -> odom is above both here.
+    expect(tf.coverage('odom', 'laser', 10.1, 0.5)).toBe('ok');
+    // Older than the history, or not connected.
+    expect(tf.coverage('world', 'laser', 9.95, 0.5)).toBe('no');
+    expect(tf.coverage('world', 'nowhere', 10.03, 0.5)).toBe('no');
+    // map -> odom stopped (localization restarting): too long since its last sample.
+    expect(tf.coverage('world', 'laser', 10.9, 0.5)).toBe('no');
+    // ...and once it's back, the hole around that time stays a hole.
+    tf.set('map', 'odom', 12.0, new Vector3(), yaw(0), false);
+    for (const t of [10.15, 10.5, 11, 11.5, 12]) tf.set('odom', 'base', t, new Vector3(), yaw(0), false);
+    expect(tf.coverage('world', 'laser', 11.0, 0.5)).toBe('no');
+  });
+
   it('forgets history when the clock jumps back (sim restarted)', () => {
     const tf = new TfTree();
     tf.set('odom', 'base', 100, new Vector3(5, 0, 0), yaw(0), false);
@@ -81,7 +108,7 @@ describe('scanToPoints', () => {
 
 describe('VoxelMemory', () => {
   it('stores each grid cell once and drops the oldest when full', () => {
-    const mem = new VoxelMemory(0.1, 2);
+    const mem = new VoxelMemory(0.1, 2, 1);
     expect(mem.add([0.01, 0.01, 0, 0.02, 0.03, 0])).toBe(1);
     expect(mem.add([1, 1, 0])).toBe(1);
     expect(mem.count).toBe(2);
@@ -89,6 +116,18 @@ describe('VoxelMemory', () => {
     expect(mem.count).toBe(2);
     // The first cell was overwritten, so it counts as new again.
     expect(mem.add([0.01, 0.01, 0])).toBe(1);
+  });
+
+  it('shows a spot only once two different scans have hit it', () => {
+    const mem = new VoxelMemory(0.1, 10);
+    // Two hits in the same scan are still one scan.
+    expect(mem.add([0.01, 0.01, 0, 0.02, 0.02, 0, 5, 5, 0])).toBe(0);
+    expect(mem.count).toBe(0);
+    expect(mem.add([0.03, 0.03, 0])).toBe(1);
+    expect(mem.add([0.03, 0.03, 0])).toBe(0);
+    expect(mem.count).toBe(1);
+    mem.clear();
+    expect(mem.add([5, 5, 0])).toBe(0);
   });
 });
 

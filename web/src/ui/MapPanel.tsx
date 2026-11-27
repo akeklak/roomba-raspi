@@ -78,7 +78,9 @@ export function MapPanel() {
   const command = (c: MapCommand) => {
     setConfirmNew(false);
     tool.set('none');
-    data.mapCommand(c);
+    // A new map starts from nothing (and on the robot it has its own origin), so the lidar
+    // memory starts over with it.
+    if (data.mapCommand(c) && c === 'new_map') data.clearMemory();
   };
   const pick = (t: Tool) => tool.set(current === t ? 'none' : t);
   const navigating = nav.state === 'starting' || nav.state === 'active';

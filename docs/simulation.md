@@ -34,7 +34,10 @@ What you see:
   walls, orange where the robot's middle can't go, violet haze where it prefers not to. Off by
   default.
 - **Lidar scan** (bright dots, warm when close, cool when far) and **Lidar memory** (teal dots
-  that stay): every spot the lidar has hit, so the room "builds up" as you drive.
+  that stay): every spot the lidar has hit, so the room "builds up" as you drive. Each scan is
+  pinned where SLAM or localization says the robot was at that moment, and a spot only shows
+  once two scans have hit it. The memory never moves afterwards, so if SLAM later corrects
+  itself, the **Map** layer is the one to trust. **New map** clears the memory.
 - **Trail**: where the robot has been.
 - **Camera**: the front camera in the corner (click it to make it bigger). **Camera in 3D** also
   draws what the camera sees as a picture in front of the robot.

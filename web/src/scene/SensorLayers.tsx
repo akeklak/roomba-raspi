@@ -1,6 +1,6 @@
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
-import { BufferAttribute, BufferGeometry, CanvasTexture, Color, DynamicDrawUsage } from 'three';
+import { BufferAttribute, BufferGeometry, CanvasTexture, Color, DynamicDrawUsage, LinearFilter } from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
@@ -25,6 +25,10 @@ function getDot(): CanvasTexture {
   g.fillStyle = grad;
   g.fillRect(0, 0, 64, 64);
   dotTexture = new CanvasTexture(c);
+  // No mipmaps: from far away (the top view) a dot is only a pixel or two wide, and the blurred
+  // smaller copies are so faint that alphaTest throws every dot away.
+  dotTexture.generateMipmaps = false;
+  dotTexture.minFilter = LinearFilter;
   return dotTexture;
 }
 
