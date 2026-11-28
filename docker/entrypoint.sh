@@ -1,5 +1,6 @@
 #!/bin/bash
 # Builds the simulation packages from the mounted repo ($REPO_DIR, default /repo), then runs the given command.
+# roomba_bringup is built for the Roomba 675 model (meshes) that the simulated robot wears.
 # Build output stays inside the container (/ws) so nothing is written into your checkout.
 set -e
 source "/opt/ros/${ROS_DISTRO}/setup.bash"
@@ -7,7 +8,7 @@ source "/opt/ros/${ROS_DISTRO}/setup.bash"
 REPO_DIR="${REPO_DIR:-/repo}"
 if [[ -d "$REPO_DIR/ros2_ws/src" ]]; then
   cd "$REPO_DIR/ros2_ws"
-  colcon --log-base /ws/log build --symlink-install --packages-select roomba_web roomba_nav roomba_sim \
+  colcon --log-base /ws/log build --symlink-install --packages-select roomba_web roomba_nav roomba_sim roomba_bringup \
     --build-base /ws/build --install-base /ws/install \
     --event-handlers console_cohesion- summary- > /tmp/colcon.log 2>&1 \
     || { cat /tmp/colcon.log; exit 1; }

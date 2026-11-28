@@ -20,7 +20,11 @@ services:
     tty: true
 
   ui:
-    build: ../web
+    build:
+      # From the repo root, because the 3D view shows the robot's meshes from roomba_bringup.
+      # web/Dockerfile.dockerignore keeps everything else out of the build.
+      context: ..
+      dockerfile: web/Dockerfile
     image: roomba-raspi-ui
     ports:
       - "8080:80"     # the web UI: open http://localhost:8080

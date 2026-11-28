@@ -19,6 +19,7 @@ first and then run unchanged on the Pi.
 ```
 
 Wait for the log to settle (about 30 seconds), then open **http://localhost:8080**.
+After you pull new changes, run `./scripts/sim.sh up` again so both images are rebuilt.
 
 ![The web UI following the robot through the living room](images/web-ui-follow.jpg)
 
@@ -26,7 +27,8 @@ What you see:
 
 - **The apartment in 3D**: walls, furniture and the dock, read from the same world file Gazebo
   uses. **Walls → Cut** lowers the walls so you can see into the rooms; **Full** and **Off** too.
-- **The robot**, with a teal ring around it so it's easy to find.
+- **The robot**: the Roomba 675 model from `description/`, with a teal ring around it so it's
+  easy to find.
 - **Map**: the map the robot is making (or the saved one it is using): free floor slightly
   lighter, walls bright, unexplored floor left clear. See [Maps and navigation](#maps-and-navigation).
 - **Planned route** (blue) and the goal (teal ring) while the robot drives itself somewhere.
@@ -149,6 +151,7 @@ The dock is the green block on the west wall; the robot starts just east of it, 
 
 | | Real robot | Simulation |
 | --- | --- | --- |
+| Body | Roomba 675 | the Roomba 675 model in `description/` (meshes, 2.72 kg, 239 mm wheel track); the 3D view in the browser shows the same meshes |
 | Drive | create_driver over serial | Gazebo DiffDrive plugin, same 0.5 m/s limit |
 | Lidar | LD19, 455 beams, 10 Hz | gpu_lidar, 455 beams, 10 Hz, 1 cm noise |
 | Camera | OV5647 fisheye | 640×480 wide-angle camera (~140°) |

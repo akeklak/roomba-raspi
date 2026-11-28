@@ -51,9 +51,10 @@ See `docs/simulation.md`. The simulated robot publishes the same topics as the r
 
 ## Web UI
 
-A full 3D view in the browser: the robot, the room around it (in the sim), the map, the lidar
-scan and everything it has seen so far, the path driven, and the camera, both in a window and
-projected in 3D in front of the robot. Drive with W A S D, the arrow keys or the on-screen pad,
+A full 3D view in the browser: the robot (the Roomba 675 model from `description/`), the room
+around it (in the sim), the map, the lidar scan and everything it has seen so far, the path
+driven, and the camera, both in a window and projected in 3D in front of the robot.
+Drive with W A S D, the arrow keys or the on-screen pad,
 or click **Go to** and a spot on the map and it drives there by itself. The Map panel makes,
 saves and switches maps. It talks to ROS through our web bridge (`ros2_ws/src/roomba_web`) on
 port 8765, which both the sim and the robot launch. If the page stops sending drive commands

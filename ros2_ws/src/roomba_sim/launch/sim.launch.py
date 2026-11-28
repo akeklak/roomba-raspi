@@ -15,7 +15,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import AppendEnvironmentVariable, DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition, LaunchConfigurationEquals
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration, PythonExpression
@@ -34,6 +34,10 @@ def generate_launch_description():
         "('-r -s --headless-rendering ' if '", headless, "' == 'true' else '-r ')",
         " + '", world, "'",
     ])
+    # The robot wears the Roomba 675 meshes from roomba_bringup (package://roomba_bringup/...).
+    # Gazebo looks those up as roomba_bringup/... under each folder in GZ_SIM_RESOURCE_PATH.
+    mesh_path = AppendEnvironmentVariable(
+        'GZ_SIM_RESOURCE_PATH', os.path.dirname(get_package_share_directory('roomba_bringup')))
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(get_package_share_directory('ros_gz_sim'), 'launch', 'gz_sim.launch.py')),
@@ -148,6 +152,7 @@ def generate_launch_description():
         DeclareLaunchArgument('x', default_value='-3.4'),
         DeclareLaunchArgument('y', default_value='0.0'),
         DeclareLaunchArgument('yaw', default_value='0.0'),
+        mesh_path,
         gazebo,
         robot_state_publisher,
         spawn,
