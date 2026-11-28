@@ -146,7 +146,7 @@ function HeadingMarker() {
 /** A glowing ring on the floor so the robot is easy to spot from far away. */
 function FloorRing() {
   return (
-    <mesh position={[0, 0, 0.003]} renderOrder={3}>
+    <mesh position={[0, 0, 0.017]} renderOrder={3}>
       <ringGeometry args={[R + 0.03, R + 0.06, 64]} />
       <meshBasicMaterial color="#4fd1c5" transparent opacity={0.85} depthWrite={false} />
     </mesh>

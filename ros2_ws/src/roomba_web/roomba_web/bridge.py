@@ -11,6 +11,8 @@ roomba_web/protocol.py.
 Safety: the page repeats its drive command ten times a second while a key or button is held.
 If those messages stop for `drive_timeout` seconds (tab closed, wifi dropped), the robot stops.
 Driving by hand also cancels any navigation goal, so the two never fight over the wheels.
+The page's top speed (the speed slider) applies to both: it scales the drive keys on the page,
+and the bridge passes it to Nav2 as a speed limit for Go to.
 
 ROS runs in a background thread; the websocket server runs on asyncio in the main thread. Each
 page gets the newest value of each kind of message, so a slow connection skips old scans and
@@ -125,8 +127,10 @@ class WebBridge(Node):
         self.create_subscription(Odometry, '/odom', self.on_odom, 10)
         self.create_subscription(MarkerArray, '/sim/world', self.on_world, LATCHED_ONE)
         self.create_subscription(Float32, '/battery/charge_ratio', self.on_battery, 10)
-        self.create_subscription(Image, camera_topic, self.on_image, qos_profile_sensor_data)
-        self.create_subscription(CameraInfo, camera_info_topic, self.on_camera_info, qos_profile_sensor_data)
+        # The camera is only subscribed while a page shows it (see update_wanted). In the sim that
+        # is what makes Gazebo render it, which costs real-time speed.
+        self.camera_topics = (camera_topic, camera_info_topic)
+        self.camera_subs = []
         self.create_subscription(OccupancyGrid, '/map', self.on_map, LATCHED_ONE)
         self.create_subscription(OccupancyGrid, '/global_costmap/costmap', self.on_costmap, LATCHED_ONE)
         self.create_subscription(Path, '/plan', self.on_plan, 1)
@@ -141,11 +145,17 @@ class WebBridge(Node):
         self.map_clients = {c: self.create_client(Trigger, f'/map_manager/{c}') for c in protocol.MAP_COMMANDS}
         try:
             from nav2_msgs.action import NavigateToPose
+            from nav2_msgs.msg import SpeedLimit
             self.NavigateToPose = NavigateToPose
+            self.SpeedLimit = SpeedLimit
             self.nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
+            # Nav2's controller drives at most this fast (absolute, m/s): the page's top speed.
+            self.speed_limit_pub = self.create_publisher(SpeedLimit, '/speed_limit', 10)
         except ImportError:
             self.NavigateToPose = None
             self.nav_client = None
+            self.speed_limit_pub = None
+        self.top_speed = None      # from the page's speed slider; None: leave Nav2's own speed
         self.goal_seq = 0          # bumped per goal; replies for older goals are ignored
         self.goal_handle = None
         self.canceled_early = set()
@@ -247,8 +257,9 @@ class WebBridge(Node):
         self.latch('map', protocol.grid_frame(msg, 'map'))
 
     def on_costmap(self, msg: OccupancyGrid) -> None:
-        if 'costmap' in self.wanted:
-            self.to_pages('costmap', protocol.grid_frame(msg, 'costmap'), stream='costmap')
+        # Kept even while no page wants it, so turning the layer on shows it straight away
+        # instead of after Nav2's next update.
+        self.to_pages('costmap', protocol.grid_frame(msg, 'costmap'), stream='costmap')
 
     def on_mapping_state(self, msg: String) -> None:
         try:
@@ -305,6 +316,7 @@ class WebBridge(Node):
             self.set_nav(state='failed', goal=goal_info,
                          message='Navigation is not running yet. Give it a few seconds after startup.')
             return
+        self.publish_speed_limit()  # again, in case Nav2 restarted since (it forgets it)
         goal = self.NavigateToPose.Goal()
         goal.pose.header.frame_id = self.map_frame
         goal.pose.pose.position.x = x
@@ -377,6 +389,27 @@ class WebBridge(Node):
             self.goal_seq += 1
             self.set_nav(state='canceled', eta=None, message=reason)
             self.latch('plan', {'op': 'plan', 'frame': self.map_frame, 'points': []})
+
+    def publish_speed_limit(self) -> None:
+        if self.speed_limit_pub is None or self.top_speed is None:
+            return
+        msg = self.SpeedLimit()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.percentage = False
+        msg.speed_limit = float(self.top_speed)
+        self.speed_limit_pub.publish(msg)
+
+    def set_camera_subscribed(self, wanted: bool) -> None:
+        if wanted and not self.camera_subs:
+            image_topic, info_topic = self.camera_topics
+            self.camera_subs = [
+                self.create_subscription(Image, image_topic, self.on_image, qos_profile_sensor_data),
+                self.create_subscription(CameraInfo, info_topic, self.on_camera_info, qos_profile_sensor_data),
+            ]
+        elif not wanted and self.camera_subs:
+            for sub in self.camera_subs:
+                self.destroy_subscription(sub)
+            self.camera_subs = []
 
     def on_plan(self, msg: Path) -> None:
         if self.nav_active():
@@ -488,6 +521,11 @@ class WebBridge(Node):
             else:
                 client.wants.discard(op)
             self.update_wanted()
+        elif op == 'top_speed':
+            speed = protocol.parse_speed(msg, self.max_linear)
+            if speed is not None and speed != self.top_speed:
+                self.top_speed = speed
+                self.in_ros(self.publish_speed_limit)
         elif op == 'goal':
             pose = protocol.parse_pose(msg)
             if pose is not None:
@@ -538,6 +576,8 @@ class WebBridge(Node):
 
     def update_wanted(self) -> None:
         self.wanted = set().union(*(c.wants for c in self.pages)) if self.pages else set()
+        camera = 'camera' in self.wanted
+        self.in_ros(lambda: self.set_camera_subscribed(camera))
 
 
 def main() -> None:

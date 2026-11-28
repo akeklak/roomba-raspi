@@ -36,6 +36,10 @@ export function App() {
     robot.data.setCostmapEnabled(s.costmap);
   }, [robot, s.costmap]);
 
+  useEffect(() => {
+    robot.data.setTopSpeed(s.speed);
+  }, [robot, s.speed]);
+
   return (
     <RobotContext.Provider value={robot}>
       <div className="app">

@@ -53,7 +53,7 @@ export function CameraRig() {
   useFrame(() => {
     const c = controls.current;
     if (!c) return;
-    const p = data.poseInFixed(BASE_FRAME, pose);
+    const p = data.drawPose(BASE_FRAME, pose);
     if (p) {
       robot.setFromMatrixPosition(p);
       heading.set(p.elements[0], p.elements[1], 0).normalize();

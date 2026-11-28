@@ -32,9 +32,10 @@ What you see:
 - **Map**: the map the robot is making (or the saved one it is using): free floor slightly
   lighter, walls bright, unexplored floor left clear. See [Maps and navigation](#maps-and-navigation).
 - **Planned route** (blue) and the goal (teal ring) while the robot drives itself somewhere.
-- **Costmap (where it avoids)**: Nav2's view of the obstacles, grown by the robot's size: red at
-  walls, orange where the robot's middle can't go, violet haze where it prefers not to. Off by
-  default.
+- **Costmap (where it avoids)**: Nav2's view of the obstacles: solid red on the obstacles
+  themselves, and a faint red tint on the floor around them where it would rather not drive
+  (within about 0.3 m). It comes from Nav2, so it shows once navigation is running (a few
+  seconds after startup). Off by default.
 - **Lidar scan** (bright dots, warm when close, cool when far) and **Lidar memory** (teal dots
   that stay): every spot the lidar has hit, so the room "builds up" as you drive. Each scan is
   pinned where SLAM or localization says the robot was at that moment, and a spot only shows
@@ -47,8 +48,9 @@ What you see:
   it), Top (whole apartment from above) and Free.
 
 Drive with **W A S D** or the **arrow keys** (hold to move, let go to stop, Space stops), or hold
-the on-screen arrows. The slider sets the top speed. Driving by hand while the robot is driving
-itself somewhere stops that, so you can always take over.
+the on-screen arrows. The slider sets the top speed, both for driving by hand and for **Go to**.
+Driving by hand while the robot is driving itself somewhere stops that, so you can always take
+over.
 
 Driving by hand slows down and stops a few centimeters short of anything the lidar sees in the
 way, and stops when the robot turns out to be pushing against something too low for the lidar
@@ -154,13 +156,26 @@ The dock is the green block on the west wall; the robot starts just east of it, 
 | Body | Roomba 675 | the Roomba 675 model in `description/` (meshes, 2.72 kg, 239 mm wheel track); the 3D view in the browser shows the same meshes |
 | Drive | create_driver over serial | Gazebo DiffDrive plugin, same 0.5 m/s limit |
 | Lidar | LD19, 455 beams, 10 Hz | gpu_lidar, 455 beams, 10 Hz, 1 cm noise |
-| Camera | OV5647 fisheye | 640×480 wide-angle camera (~140°) |
+| Camera | OV5647 fisheye | 320×240 wide-angle camera (~140°) on the front bumper face, rendered only while the web UI shows it, without shadows |
 | Frames | `map → odom → base_footprint → base_link → ldlidar_link`, `camera_link`, `camera_optical_link` | same, plus `world → map` fixed at where the robot starts, so the map lines up with the 3D apartment |
 | Localization | slam_toolbox while mapping, AMCL on the saved map | same (or `localization:=ground_truth` / `odom`, without mapping) |
 | Maps | `~/roomba_maps` on the Pi | `maps/` in your checkout |
 
 Not simulated yet: bumpers, cliff sensors, battery, docking and the vacuum. Those come with
 phase 3.
+
+The sim lays a plain floor under every world, and shuts the doorways of a world that stops at
+them (the kitchen's five; the rooms beyond aren't modeled), so the robot stays in the rooms that
+exist. The map shows each shut doorway as a wall; the 3D view still draws it open. While making
+a map, **Go to** only works for spots the robot has already seen: send it somewhere nearer first.
+
+The sim keeps to real time (**Sim time** in the status panel keeps pace with a clock). Gazebo
+renders the lidar and camera in software here, and pauses the physics while it does, which on its
+own made the kitchen run at about 0.7x. Three things make up for it: the camera is small and only
+rendered while the web UI shows it, physics steps are 4 ms, and `realtime_pacer` raises Gazebo's
+target speed just enough to make up the time spent rendering (it logs when it does). If the
+machine is too busy to keep up anyway, the clock and everything with it runs slow; it never
+skips ahead.
 
 ## Linux server instead
 

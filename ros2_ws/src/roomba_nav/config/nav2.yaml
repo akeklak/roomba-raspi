@@ -111,13 +111,14 @@ controller_server:
     general_goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
       stateful: true
-      xy_goal_tolerance: 0.12
+      xy_goal_tolerance: 0.05   # ours: 0.12 let it stop up to 12 cm short, e.g. well off a wall
       yaw_goal_tolerance: 0.25
     # ours: Regulated Pure Pursuit instead of MPPI. It follows the planned path closely (good for
     # cleaning in rows later), turns in place like a Roomba, and is light enough for a Pi 4.
     # Obstacles that appear are handled by replanning around them once a second.
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      # The web UI's speed slider replaces this through /speed_limit (web_bridge).
       desired_linear_vel: 0.3
       lookahead_dist: 0.4
       min_lookahead_dist: 0.25
@@ -139,9 +140,9 @@ controller_server:
       regulated_linear_scaling_min_radius: 0.6
       regulated_linear_scaling_min_speed: 0.1
       use_cost_regulated_linear_velocity_scaling: true
-      cost_scaling_dist: 0.3
+      cost_scaling_dist: 0.25
       cost_scaling_gain: 1.0
-      inflation_cost_scaling_factor: 4.0
+      inflation_cost_scaling_factor: 8.0      # must match the costmaps' cost_scaling_factor
       use_fixed_curvature_lookahead: false
       curvature_lookahead_dist: 0.6
       max_robot_pose_search_dist: 10.0
@@ -178,7 +179,8 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: false
     feedback: "OPEN_LOOP"
-    max_velocity: [0.4, 0.0, 1.5]
+    # Up to the Roomba's 0.5 m/s, so the speed slider's top setting also applies to Go to.
+    max_velocity: [0.5, 0.0, 1.5]
     min_velocity: [-0.3, 0.0, -1.5]
     max_accel: [1.0, 0.0, 3.2]
     max_decel: [-1.0, 0.0, -3.2]
@@ -189,7 +191,8 @@ velocity_smoother:
 
 # Costmaps: the map with obstacles grown by the robot's size, so the planner can treat the robot
 # as a point. Lethal within 0.18 m of an obstacle (the robot's radius plus a little), then a cost
-# that fades out by 0.45 m, which keeps paths away from walls but still fits 0.9 m doorways.
+# that fades out by 0.30 m: paths keep a little off walls but can get close, and a 0.7 m kitchen
+# aisle still has a cheap middle.
 
 local_costmap:
   local_costmap:
@@ -220,8 +223,10 @@ local_costmap:
           obstacle_min_range: 0.2
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 4.0
-        inflation_radius: 0.45
+        # ours: a short, steep falloff so the Roomba can get within a few cm of walls and
+        # furniture (it is a vacuum), instead of keeping ~0.25 m clear of them.
+        cost_scaling_factor: 8.0
+        inflation_radius: 0.30
       always_send_full_costmap: true
 
 global_costmap:
@@ -255,6 +260,8 @@ global_costmap:
           obstacle_min_range: 0.2
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 4.0
-        inflation_radius: 0.45
+        # ours: a short, steep falloff so the Roomba can get within a few cm of walls and
+        # furniture (it is a vacuum), instead of keeping ~0.25 m clear of them.
+        cost_scaling_factor: 8.0
+        inflation_radius: 0.30
       always_send_full_costmap: true

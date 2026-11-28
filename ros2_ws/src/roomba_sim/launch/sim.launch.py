@@ -15,12 +15,44 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import AppendEnvironmentVariable, DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import (AppendEnvironmentVariable, DeclareLaunchArgument, IncludeLaunchDescription,
+                            OpaqueFunction)
 from launch.conditions import IfCondition, LaunchConfigurationEquals
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterValue
+from roomba_sim.doorways import doors_sdf
+
+# Floor everywhere, just under the world's own floor. A world may model only some rooms (the
+# kitchen ends at its doorways: the space beyond is unmodeled), and a robot that drove through
+# one used to drop out of the world. Its wheels kept turning as it fell, so odometry, and the web
+# UI with it, showed it driving on through walls. Past a doorway it now finds plain floor.
+SAFETY_FLOOR_SDF = """<sdf version="1.9">
+  <model name="safety_floor">
+    <static>true</static>
+    <link name="link">
+      <collision name="collision">
+        <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+      </collision>
+      <visual name="visual">
+        <pose>0 0 -0.005 0 0 0</pose>
+        <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+        <material><ambient>0.3 0.3 0.3 1</ambient><diffuse>0.3 0.3 0.3 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+</sdf>"""
+
+
+def closed_doors(context):
+    """A shut door in each doorway of a world that ends at its doorways (roomba_sim/doorways.py),
+    so the robot stays in the rooms that are modeled. Nothing for worlds without them."""
+    sdf = doors_sdf(LaunchConfiguration('world').perform(context))
+    if sdf is None:
+        return []
+    return [Node(package='ros_gz_sim', executable='create', output='screen',
+                 arguments=['-name', 'closed_doors', '-string', sdf])]
 
 
 def generate_launch_description():
@@ -44,6 +76,21 @@ def generate_launch_description():
         launch_arguments={'gz_args': gz_args, 'on_exit_shutdown': 'true'}.items(),
     )
 
+    # Keeps sim time in step with the wall clock while Gazebo renders the camera and lidar
+    # (roomba_sim/realtime_pacer.py). It also sets 4 ms physics steps.
+    realtime_pacer = Node(
+        package='roomba_sim',
+        executable='realtime_pacer',
+        output='screen',
+    )
+
+    # Lights stop casting shadows in the robot's camera picture (roomba_sim/no_shadows.py).
+    no_shadows = Node(
+        package='roomba_sim',
+        executable='no_shadows',
+        output='screen',
+    )
+
     robot_description = ParameterValue(
         Command(['xacro ', os.path.join(share, 'urdf', 'roomba_sim.urdf.xacro')]),
         value_type=str,
@@ -64,6 +111,13 @@ def generate_launch_description():
             '-x', LaunchConfiguration('x'), '-y', LaunchConfiguration('y'),
             '-z', '0.01', '-Y', LaunchConfiguration('yaw'),
         ],
+    )
+
+    safety_floor = Node(
+        package='ros_gz_sim',
+        executable='create',
+        output='screen',
+        arguments=['-name', 'safety_floor', '-string', SAFETY_FLOOR_SDF],
     )
 
     bridge = Node(
@@ -154,8 +208,12 @@ def generate_launch_description():
         DeclareLaunchArgument('yaw', default_value='0.0'),
         mesh_path,
         gazebo,
+        realtime_pacer,
+        no_shadows,
         robot_state_publisher,
         spawn,
+        safety_floor,
+        OpaqueFunction(function=closed_doors),
         bridge,
         world_to_map,
         nav,

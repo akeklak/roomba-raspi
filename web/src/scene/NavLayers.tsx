@@ -89,14 +89,17 @@ function GridLayer({ kind, height, renderOrder }: { kind: GridKind; height: numb
   );
 }
 
+// Everything drawn flat on the floor sits at least 1 cm up: the kitchen's rugs are 6.5 mm thick,
+// and an overlay at the same height flickers against them (and hides under them below it).
+
 /** The map: free space slightly lighter than the floor, walls bright, unknown left clear. */
 export function MapLayer() {
-  return <GridLayer kind="map" height={0.003} renderOrder={-2} />;
+  return <GridLayer kind="map" height={0.010} renderOrder={-2} />;
 }
 
 /** Nav2's costmap: obstacles grown by the robot's size, where it plans not to go. */
 export function CostmapLayer() {
-  return <GridLayer kind="costmap" height={0.006} renderOrder={-1} />;
+  return <GridLayer kind="costmap" height={0.013} renderOrder={-1} />;
 }
 
 /** The path Nav2 is following. */
@@ -135,11 +138,11 @@ export function PlanLine() {
 function PoseMarker({ color, opacity = 1 }: { color: string; opacity?: number }) {
   return (
     <group>
-      <mesh position={[0, 0, 0.008]} renderOrder={4}>
+      <mesh position={[0, 0, 0.019]} renderOrder={4}>
         <ringGeometry args={[0.15, 0.19, 48]} />
         <meshBasicMaterial color={color} transparent opacity={opacity} depthWrite={false} toneMapped={false} side={DoubleSide} />
       </mesh>
-      <mesh position={[0.27, 0, 0.008]} rotation={[0, 0, -Math.PI / 2]} renderOrder={4}>
+      <mesh position={[0.27, 0, 0.019]} rotation={[0, 0, -Math.PI / 2]} renderOrder={4}>
         <circleGeometry args={[0.07, 3]} />
         <meshBasicMaterial color={color} transparent opacity={opacity} depthWrite={false} toneMapped={false} side={DoubleSide} />
       </mesh>

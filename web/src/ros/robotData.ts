@@ -4,6 +4,7 @@ import { Store } from '../store';
 import type { CameraMessage, Message, RobotConnection } from './connection';
 import { decodeGrid } from './grid';
 import type { Grid, GridKind } from './grid';
+import { PlaybackClock } from './playback';
 import { scanToPoints } from './scan';
 import type { LaserScan } from './scan';
 import { TfTree, cleanFrame } from './tf';
@@ -134,6 +135,7 @@ export class RobotData {
   private unsubscribe: Array<() => void> = [];
   private cameraWanted = false;
   private costmapWanted = false;
+  private topSpeed: number | null = null;
   private decodingGrid = false;
   private pendingGrids: ArrayBuffer[] = [];
   private noticeId = 0;
@@ -144,6 +146,8 @@ export class RobotData {
   /** Scans waiting for the transforms that place them, oldest first (see rememberScans). */
   private memoryQueue: Array<{ scan: LaserScan; at: number }> = [];
   private scratch = new Matrix4();
+  /** The robot's clock, played back smoothly for drawing (see drawPose). */
+  private playback = new PlaybackClock();
 
   constructor(private readonly connection: RobotConnection) {}
 
@@ -153,6 +157,7 @@ export class RobotData {
       c.on('hello', () => {
         c.send({ op: 'camera', enabled: this.cameraWanted });
         c.send({ op: 'costmap', enabled: this.costmapWanted });
+        if (this.topSpeed !== null) c.send({ op: 'top_speed', speed: this.topSpeed });
       }),
       c.on('tf', (m) => this.onTf(m)),
       c.on('scan', (m) => this.onScan(m as unknown as LaserScan)),
@@ -168,6 +173,7 @@ export class RobotData {
       c.on('notice', (m) => this.notice.set({ id: ++this.noticeId, level: m.level, text: m.text, at: Date.now() })),
       c.on('disconnected', () => {
         this.tf.clear();
+        this.playback.reset();
         this.memoryQueue = [];
         this.status.update({ scanHz: null, speed: null, turnRate: null });
         this.nav.set(IDLE_NAV);
@@ -195,6 +201,12 @@ export class RobotData {
     if (!enabled) {
       this.grids.costmap = { grid: null, version: this.grids.costmap.version + 1 };
     }
+  }
+
+  /** The speed slider: the robot's top speed in m/s, for Go to as well as driving by hand. */
+  setTopSpeed(speed: number): void {
+    this.topSpeed = speed;
+    this.connection.send({ op: 'top_speed', speed });
   }
 
   /** Drive to this pose on the map. */
@@ -250,6 +262,14 @@ export class RobotData {
     return this.tf.lookup(this.fixedFrame(), frame, undefined, out);
   }
 
+  /**
+   * Pose of `frame` in the fixed frame for drawing this frame of the 3D view: a moment behind
+   * the newest data, interpolated, so the robot glides instead of jumping with each update.
+   */
+  drawPose(frame: string, out?: Matrix4): Matrix4 | null {
+    return this.tf.lookup(this.fixedFrame(), frame, this.playback.now(performance.now() / 1000), out);
+  }
+
   clearMemory(): void {
     this.memory.clear();
     this.memoryQueue = [];
@@ -269,7 +289,10 @@ export class RobotData {
         new Quaternion(tr.q[0], tr.q[1], tr.q[2], tr.q[3]),
         tr.static,
       );
-      if (cleanFrame(tr.child) === BASE_FRAME) movedBase = true;
+      if (cleanFrame(tr.child) === BASE_FRAME) {
+        movedBase = true;
+        if (!tr.static) this.playback.observe(tr.stamp, performance.now() / 1000);
+      }
     }
     if (this.tf.version !== versionBefore) this.pickFixedFrame();
     if (movedBase) this.extendTrail();
@@ -298,7 +321,7 @@ export class RobotData {
       p.copyWithin(0, (TRAIL_CAPACITY / 2) * 3);
       t.count = TRAIL_CAPACITY / 2;
     }
-    p.set([e[12], e[13], 0.005], t.count * 3);
+    p.set([e[12], e[13], 0.016], t.count * 3);
     t.count++;
     t.version++;
   }
@@ -353,7 +376,7 @@ export class RobotData {
   private onPlan(msg: Message): void {
     const points = (msg.points ?? []) as Array<[number, number]>;
     const positions = new Float32Array(points.length * 3);
-    points.forEach(([x, y], i) => positions.set([x, y, 0.012], i * 3));
+    points.forEach(([x, y], i) => positions.set([x, y, 0.022], i * 3));
     this.plan = { frame: msg.frame ?? MAP_FRAME, positions, version: this.plan.version + 1 };
   }
 

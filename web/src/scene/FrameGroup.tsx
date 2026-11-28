@@ -6,7 +6,10 @@ import type { Group } from 'three';
 
 import { useRobot } from '../context';
 
-/** Places its children at a TF frame (newest pose), and hides them while that frame is unknown. */
+/**
+ * Places its children at a TF frame, and hides them while that frame is unknown. Uses the pose
+ * for drawing (RobotData.drawPose), so moving frames glide rather than jump with each update.
+ */
 export function FrameGroup({ frame, children }: { frame: string; children: ReactNode }) {
   const ref = useRef<Group>(null);
   const { data } = useRobot();
@@ -14,7 +17,7 @@ export function FrameGroup({ frame, children }: { frame: string; children: React
   useFrame(() => {
     const g = ref.current;
     if (!g) return;
-    const pose = data.poseInFixed(frame, m);
+    const pose = data.drawPose(frame, m);
     g.visible = pose !== null;
     if (pose) pose.decompose(g.position, g.quaternion, g.scale);
   });

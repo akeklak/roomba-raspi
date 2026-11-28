@@ -1,4 +1,7 @@
 # Gazebo <-> ROS 2 topic bridge. Topic names match the real robot.
+# The camera is lazy: it is only bridged while something on the ROS side subscribes (the web
+# bridge does while a page shows the camera), and Gazebo only renders it while it is bridged.
+# Rendering it pauses the physics, so this keeps the sim at real time when nobody watches.
 - ros_topic_name: "/clock"
   gz_topic_name: "/clock"
   ros_type_name: "rosgraph_msgs/msg/Clock"
@@ -46,9 +49,11 @@
   ros_type_name: "sensor_msgs/msg/Image"
   gz_type_name: "gz.msgs.Image"
   direction: GZ_TO_ROS
+  lazy: true
 
 - ros_topic_name: "/camera/camera_info"
   gz_topic_name: "/camera/camera_info"
   ros_type_name: "sensor_msgs/msg/CameraInfo"
   gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS
+  lazy: true
