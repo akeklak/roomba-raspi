@@ -22,6 +22,26 @@ from launch.substitutions import Command, LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterValue
 
+# Floor everywhere, just under the world's own floor. A world may model only some rooms (the
+# kitchen ends at its doorways: the space beyond is unmodeled), and a robot that drove through
+# one used to drop out of the world. Its wheels kept turning as it fell, so odometry, and the web
+# UI with it, showed it driving on through walls. Past a doorway it now finds plain floor.
+SAFETY_FLOOR_SDF = """<sdf version="1.9">
+  <model name="safety_floor">
+    <static>true</static>
+    <link name="link">
+      <collision name="collision">
+        <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+      </collision>
+      <visual name="visual">
+        <pose>0 0 -0.005 0 0 0</pose>
+        <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+        <material><ambient>0.3 0.3 0.3 1</ambient><diffuse>0.3 0.3 0.3 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+</sdf>"""
+
 
 def generate_launch_description():
     share = get_package_share_directory('roomba_sim')
@@ -72,6 +92,13 @@ def generate_launch_description():
             '-x', LaunchConfiguration('x'), '-y', LaunchConfiguration('y'),
             '-z', '0.01', '-Y', LaunchConfiguration('yaw'),
         ],
+    )
+
+    safety_floor = Node(
+        package='ros_gz_sim',
+        executable='create',
+        output='screen',
+        arguments=['-name', 'safety_floor', '-string', SAFETY_FLOOR_SDF],
     )
 
     bridge = Node(
@@ -165,6 +192,7 @@ def generate_launch_description():
         realtime_pacer,
         robot_state_publisher,
         spawn,
+        safety_floor,
         bridge,
         world_to_map,
         nav,
