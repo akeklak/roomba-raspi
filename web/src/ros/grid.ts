@@ -74,24 +74,27 @@ export function mapPixels(cells: Uint8Array, out: Uint8Array = new Uint8Array(ce
   return out;
 }
 
+/** The costmap's color: a bright red that stands out against floors, maps and the 3D rooms. */
+export const COSTMAP_RED: readonly [number, number, number] = [255, 32, 32];
+
 /**
- * RGBA pixels for Nav2's costmap: nothing where it's free, then a violet haze that thickens
- * toward obstacles, orange where the robot's middle can't go (99) and red at obstacles (100).
+ * RGBA pixels for Nav2's costmap, all in COSTMAP_RED: clear where it's free (or unknown), then
+ * fading in from faint at the lowest costs to nearly solid where the robot's middle can't go (99)
+ * and solid at obstacles (100). The costs fall off over about half a meter around obstacles.
  */
 export function costmapPixels(cells: Uint8Array, out: Uint8Array = new Uint8Array(cells.length * 4)): Uint8Array {
+  const [r, g, b] = COSTMAP_RED;
   for (let i = 0; i < cells.length; i++) {
     const v = cells[i];
     const o = i * 4;
-    if (v === 0 || v === UNKNOWN) {
+    if (v === 0 || v > 100) {
       out[o + 3] = 0;
-    } else if (v >= 100) {
-      out.set([245, 80, 90, 200], o);
-    } else if (v >= 99) {
-      out.set([246, 160, 70, 150], o);
-    } else {
-      const k = v / 98;
-      out.set([150 + 70 * k, 90, 230 - 60 * k, 25 + 95 * k], o);
+      continue;
     }
+    out[o] = r;
+    out[o + 1] = g;
+    out[o + 2] = b;
+    out[o + 3] = v >= 100 ? 255 : v >= 99 ? 225 : 40 + Math.round((150 * (v - 1)) / 97);
   }
   return out;
 }

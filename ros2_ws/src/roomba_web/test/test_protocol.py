@@ -191,3 +191,12 @@ def test_not_stalled_driving_down_a_hallway():
     # Only walls alongside: both answers fit, so it doesn't call it stuck.
     hall = [(k / 20, 0.5) for k in range(-20, 61)] + [(k / 20, -0.5) for k in range(-20, 61)]
     assert not protocol.stalled([(0.0, 0.0, 0.0, hall), (0.15, 0.0, 0.0, hall)], 0.3)
+
+
+def test_parse_speed_caps_at_the_limit_and_rejects_nonsense():
+    assert protocol.parse_speed({'speed': 0.35}, 0.5) == 0.35
+    assert protocol.parse_speed({'speed': '0.45'}, 0.5) == 0.45
+    assert protocol.parse_speed({'speed': 2.0}, 0.5) == 0.5
+    for bad in ({}, {'speed': None}, {'speed': 'fast'}, {'speed': 0}, {'speed': -0.2},
+                {'speed': float('nan')}, {'speed': float('inf')}):
+        assert protocol.parse_speed(bad, 0.5) is None

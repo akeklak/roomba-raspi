@@ -33,6 +33,11 @@
   <xacro:property name="camera_pitch" value="0.35" />
   <!-- Wide-angle camera standing in for the fisheye lens (about 140 degrees). -->
   <xacro:property name="camera_hfov" value="2.4" />
+  <!-- 320x240 keeps the sim in real time: Gazebo renders the camera in software (no GPU in
+       Docker on a Mac) and pauses the physics while it does, and at 640x480 the kitchen ran at
+       about 0.75x. Plenty for the camera window in the web UI. -->
+  <xacro:property name="camera_image_width" value="320" />
+  <xacro:property name="camera_image_height" value="240" />
 
   <material name="lidar_blue"><color rgba="0.15 0.35 0.75 1" /></material>
 
@@ -227,8 +232,8 @@
         <camera_info_topic>/camera/camera_info</camera_info_topic>
         <horizontal_fov>${camera_hfov}</horizontal_fov>
         <image>
-          <width>640</width>
-          <height>480</height>
+          <width>${camera_image_width}</width>
+          <height>${camera_image_height}</height>
           <format>R8G8B8</format>
         </image>
         <clip>

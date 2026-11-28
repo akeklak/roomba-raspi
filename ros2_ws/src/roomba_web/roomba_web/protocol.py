@@ -32,6 +32,7 @@ The UI sends:
                                      its way (turning is always allowed).
     camera       {enabled}           whether this page wants camera pictures
     costmap      {enabled}           whether this page wants Nav2's costmap
+    top_speed    {speed}             the speed slider, in m/s: Go to (Nav2) drives at most this fast
     goal         {x, y, yaw}         drive to this pose on the map
     cancel       {}                  stop navigating
     initial_pose {x, y, yaw}         "the robot is here": corrects localization on a saved map
@@ -178,6 +179,17 @@ def clamp_drive(cmd: dict, max_linear: float, max_angular: float) -> tuple:
     if not (math.isfinite(linear) and math.isfinite(angular)):
         return 0.0, 0.0
     return (max(-max_linear, min(max_linear, linear)), max(-max_angular, min(max_angular, angular)))
+
+
+def parse_speed(cmd: dict, max_speed: float) -> Optional[float]:
+    """The top speed a page asks for (m/s, at most `max_speed`), or None if it isn't one."""
+    try:
+        speed = float(cmd.get('speed'))
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(speed) or speed <= 0.0:
+        return None
+    return round(min(speed, max_speed), 3)
 
 
 # Driving by hand stops short of what the lidar sees. Pushing into a wall makes the wheels spin in

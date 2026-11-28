@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { UNKNOWN, cellAt, costmapPixels, decodeGrid, mapPixels, parseGridFrame } from './grid';
+import { COSTMAP_RED, UNKNOWN, cellAt, costmapPixels, decodeGrid, mapPixels, parseGridFrame } from './grid';
 import type { Grid, GridHeader } from './grid';
 
 const HEADER: GridHeader = {
@@ -54,13 +54,15 @@ describe('grid colors', () => {
     expect(px[8]).toBeGreaterThan(px[4]);
   });
 
-  it('leave free costmap cells clear and mark obstacles', () => {
-    const px = costmapPixels(new Uint8Array([0, UNKNOWN, 30, 99, 100]));
+  it('leave free costmap cells clear and fade bright red in toward obstacles', () => {
+    const px = costmapPixels(new Uint8Array([0, UNKNOWN, 1, 30, 98, 99, 100]));
     expect(px[3]).toBe(0);
     expect(px[7]).toBe(0);
-    expect(px[11]).toBeGreaterThan(0);
-    expect(px[15]).toBeGreaterThan(px[11]);
-    expect(px[16]).toBeGreaterThan(200); // red at obstacles
+    const alpha = [2, 3, 4, 5, 6].map((i) => px[i * 4 + 3]);
+    expect(alpha[0]).toBeGreaterThan(0);
+    for (let i = 1; i < alpha.length; i++) expect(alpha[i]).toBeGreaterThan(alpha[i - 1]);
+    expect(alpha[4]).toBe(255); // solid at obstacles
+    for (const i of [2, 3, 4, 5, 6]) expect([...px.subarray(i * 4, i * 4 + 3)]).toEqual([...COSTMAP_RED]);
   });
 });
 

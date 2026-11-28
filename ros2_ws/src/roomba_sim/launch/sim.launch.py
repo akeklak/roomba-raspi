@@ -44,6 +44,14 @@ def generate_launch_description():
         launch_arguments={'gz_args': gz_args, 'on_exit_shutdown': 'true'}.items(),
     )
 
+    # Keeps sim time in step with the wall clock while Gazebo renders the camera and lidar
+    # (roomba_sim/realtime_pacer.py). It also sets 2 ms physics steps.
+    realtime_pacer = Node(
+        package='roomba_sim',
+        executable='realtime_pacer',
+        output='screen',
+    )
+
     robot_description = ParameterValue(
         Command(['xacro ', os.path.join(share, 'urdf', 'roomba_sim.urdf.xacro')]),
         value_type=str,
@@ -154,6 +162,7 @@ def generate_launch_description():
         DeclareLaunchArgument('yaw', default_value='0.0'),
         mesh_path,
         gazebo,
+        realtime_pacer,
         robot_state_publisher,
         spawn,
         bridge,

@@ -118,6 +118,7 @@ controller_server:
     # Obstacles that appear are handled by replanning around them once a second.
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      # The web UI's speed slider replaces this through /speed_limit (web_bridge).
       desired_linear_vel: 0.3
       lookahead_dist: 0.4
       min_lookahead_dist: 0.25
@@ -178,7 +179,8 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: false
     feedback: "OPEN_LOOP"
-    max_velocity: [0.4, 0.0, 1.5]
+    # Up to the Roomba's 0.5 m/s, so the speed slider's top setting also applies to Go to.
+    max_velocity: [0.5, 0.0, 1.5]
     min_velocity: [-0.3, 0.0, -1.5]
     max_accel: [1.0, 0.0, 3.2]
     max_decel: [-1.0, 0.0, -3.2]

@@ -48,6 +48,8 @@ export function LayersPanel() {
 function LayerControls({ hasWorld }: { hasWorld: boolean }) {
   const s = useStore(settings);
   const { data } = useRobot();
+  // Nav2 makes the costmap, so there is none until navigation is running.
+  const navReady = useStore(data.mapping)?.nav_ready ?? false;
   return (
     <>
       <div className="label">View</div>
@@ -63,6 +65,9 @@ function LayerControls({ hasWorld }: { hasWorld: boolean }) {
         <label key={key} className="toggle">
           <input type="checkbox" checked={s[key]} onChange={(e) => settings.update({ [key]: e.target.checked })} />
           <span>{label}</span>
+          {key === 'costmap' && s.costmap && !navReady ? (
+            <span className="muted small">· once navigation is running</span>
+          ) : null}
         </label>
       ))}
       <button className="ghost" onClick={() => data.clearMemory()}>

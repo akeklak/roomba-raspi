@@ -19,7 +19,10 @@ const PAD: Array<{ input: DriveInput; label: string; aria: string }> = [
   { input: [-1, -1], label: '↘', aria: 'Back right' },
 ];
 
-/** Hold-to-drive buttons and a speed slider, bottom right. WASD and the arrow keys work too. */
+/**
+ * Hold-to-drive buttons and a speed slider, bottom right. WASD and the arrow keys work too. The
+ * slider sets the top speed for Go to as well (App passes it to the robot).
+ */
 export function DrivePad() {
   const { connection, data } = useRobot();
   const { speed } = useStore(settings);
@@ -88,8 +91,8 @@ export function DrivePad() {
           </button>
         ))}
       </div>
-      <label className="speed">
-        <span>Speed {speed.toFixed(2)} m/s</span>
+      <label className="speed" title="Top speed when driving by hand and for Go to">
+        <span>Top speed {speed.toFixed(2)} m/s</span>
         <input
           type="range"
           min={0.05}
