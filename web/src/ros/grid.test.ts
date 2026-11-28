@@ -62,6 +62,8 @@ describe('grid colors', () => {
     expect(alpha[0]).toBeGreaterThan(0);
     for (let i = 1; i < alpha.length; i++) expect(alpha[i]).toBeGreaterThan(alpha[i - 1]);
     expect(alpha[4]).toBe(255); // solid at obstacles
+    expect(alpha[2]).toBeLessThan(128); // where it can still drive stays see-through
+    expect(alpha[3]).toBeGreaterThan(200); // where its middle can't go is nearly solid
     for (const i of [2, 3, 4, 5, 6]) expect([...px.subarray(i * 4, i * 4 + 3)]).toEqual([...COSTMAP_RED]);
   });
 });
