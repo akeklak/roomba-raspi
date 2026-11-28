@@ -9,6 +9,7 @@ import { BASE_FRAME } from '../ros/robotData';
 import type { WorldShape } from '../ros/robotData';
 import { settings } from '../settings';
 import { useStore } from '../store';
+import { tool } from '../ui/tools';
 
 const FOLLOW_OFFSET = new Vector3(-1.1, -1.5, 2.3);
 const TOP_HEIGHT = 9;
@@ -34,6 +35,8 @@ function worldArea(shapes: WorldShape[], fixedFrame: string): { x: number; y: nu
 export function CameraRig() {
   const { data } = useRobot();
   const { view } = useStore(settings);
+  // While picking a spot on the floor, dragging aims the spot instead of turning the view.
+  const picking = useStore(tool) !== 'none';
   const controls = useRef<OrbitControlsImpl>(null);
   const camera = useThree((s) => s.camera);
   const pose = useMemo(() => new Matrix4(), []);
@@ -100,7 +103,8 @@ export function CameraRig() {
       enableDamping
       dampingFactor={0.12}
       enabled={view !== 'chase'}
-      enableRotate={view !== 'top'}
+      enableRotate={view !== 'top' && !picking}
+      enablePan={!picking}
       maxDistance={30}
       minDistance={0.3}
     />

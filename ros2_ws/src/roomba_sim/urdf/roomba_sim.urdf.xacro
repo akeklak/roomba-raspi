@@ -6,19 +6,23 @@
   drivers runs unchanged:
     /cmd_vel in, /odom, /tf (odom -> base_footprint), /joint_states, /scan,
     /camera/image_raw and /camera/camera_info out.
-  Geometry is plain shapes (no meshes) to keep the sim light.
-  Dimensions follow the Roomba 600 / Create 2: 0.34 m across, wheels 0.235 m apart, 72 mm wheels.
+  It wears the Roomba 675 meshes made from photos of the real robot
+  (roomba_bringup/models/roomba_675, see description/README.md), and its measurements: 0.34 m
+  across, 80 mm tall, wheels 0.239 m apart, front caster 0.13 m ahead of the axle, 2.72 kg.
+  Collisions stay plain shapes so the physics stays light and predictable.
 -->
 <robot name="roomba_sim" xmlns:xacro="http://ros.org/wiki/xacro">
 
   <xacro:property name="body_radius" value="0.17" />
   <xacro:property name="body_height" value="0.07" />
-  <xacro:property name="body_mass" value="3.5" />
+  <xacro:property name="body_mass" value="2.72" />
   <xacro:property name="ground_clearance" value="0.01" />
   <xacro:property name="wheel_radius" value="0.036" />
-  <xacro:property name="wheel_width" value="0.02" />
-  <xacro:property name="wheel_separation" value="0.235" />
+  <xacro:property name="wheel_width" value="0.015" />
+  <xacro:property name="wheel_separation" value="0.239" />
   <xacro:property name="caster_radius" value="0.012" />
+  <!-- The meshes' origin is the floor under the middle of the drive axle, +X forward, +Z up. -->
+  <xacro:property name="mesh_path" value="package://roomba_bringup/models/roomba_675/meshes" />
 
   <!-- Sensors, matching the placeholders in roomba_bringup/urdf/roomba.urdf.xacro.
        Heights are above the floor. -->
@@ -30,8 +34,6 @@
   <!-- Wide-angle camera standing in for the fisheye lens (about 140 degrees). -->
   <xacro:property name="camera_hfov" value="2.4" />
 
-  <material name="body_grey"><color rgba="0.25 0.25 0.27 1" /></material>
-  <material name="wheel_black"><color rgba="0.05 0.05 0.05 1" /></material>
   <material name="lidar_blue"><color rgba="0.15 0.35 0.75 1" /></material>
 
   <xacro:macro name="cylinder_inertia" params="m r h">
@@ -48,9 +50,8 @@
   <!-- base_link sits at wheel-axle height. -->
   <link name="base_link">
     <visual>
-      <origin xyz="0 0 ${ground_clearance + body_height/2 - wheel_radius}" />
-      <geometry><cylinder radius="${body_radius}" length="${body_height}" /></geometry>
-      <material name="body_grey" />
+      <origin xyz="0 0 ${-wheel_radius}" />
+      <geometry><mesh filename="${mesh_path}/body.dae" /></geometry>
     </visual>
     <collision>
       <origin xyz="0 0 ${ground_clearance + body_height/2 - wheel_radius}" />
@@ -77,13 +78,12 @@
   <xacro:macro name="wheel" params="side y">
     <link name="${side}_wheel_link">
       <visual>
-        <origin rpy="${pi/2} 0 0" />
-        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}" /></geometry>
-        <material name="wheel_black" />
+        <geometry><mesh filename="${mesh_path}/drive_wheel.dae" /></geometry>
       </visual>
+      <!-- A sphere touches the floor at one point in the middle of the wheel. A cylinder touches
+           at its inner edge, which made the robot turn about 9% faster than its odometry said. -->
       <collision>
-        <origin rpy="${pi/2} 0 0" />
-        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}" /></geometry>
+        <geometry><sphere radius="${wheel_radius}" /></geometry>
       </collision>
       <inertial>
         <origin rpy="${pi/2} 0 0" />
@@ -105,9 +105,13 @@
   <xacro:wheel side="left" y="${wheel_separation/2}" />
   <xacro:wheel side="right" y="${-wheel_separation/2}" />
 
-  <!-- Frictionless front and rear sliders keep the body level. -->
-  <xacro:macro name="caster" params="name x">
+  <!-- Frictionless front and rear sliders keep the body level. The real Roomba has only the
+       front caster; the rear slider keeps the simulated body from tipping back. -->
+  <xacro:macro name="caster" params="name x mesh:=''">
     <link name="${name}_caster_link">
+      <xacro:if value="${mesh != ''}">
+        <visual><geometry><mesh filename="${mesh_path}/${mesh}" /></geometry></visual>
+      </xacro:if>
       <collision><geometry><sphere radius="${caster_radius}" /></geometry></collision>
       <inertial>
         <mass value="0.02" />
@@ -124,7 +128,7 @@
       <mu2>0.0</mu2>
     </gazebo>
   </xacro:macro>
-  <xacro:caster name="front" x="0.13" />
+  <xacro:caster name="front" x="0.13" mesh="caster.dae" />
   <xacro:caster name="rear" x="-0.13" />
 
   <!-- Sensor frames (same names as the real robot). -->

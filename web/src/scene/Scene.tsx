@@ -5,6 +5,7 @@ import { settings } from '../settings';
 import { useStore } from '../store';
 import { CameraFrustum } from './CameraFrustum';
 import { CameraRig } from './CameraRig';
+import { CostmapLayer, FloorTool, GoalMarker, MapLayer, PlanLine, ToolPreview } from './NavLayers';
 import { RobotModel } from './RobotModel';
 import { LidarMemory, LidarScan, Trail } from './SensorLayers';
 import { World } from './World';
@@ -34,6 +35,12 @@ export function Scene() {
         shadow-bias={-0.0005}
       />
       <Floor />
+      {s.map ? <MapLayer /> : null}
+      {s.costmap ? <CostmapLayer /> : null}
+      {s.plan ? <PlanLine /> : null}
+      <GoalMarker />
+      <ToolPreview />
+      <FloorTool />
       <Suspense fallback={null}>
         <World />
         <RobotModel />

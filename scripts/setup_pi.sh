@@ -47,6 +47,15 @@ sudo apt-get install -y \
   ros-${ROS_DISTRO}-nav2-util \
   ros-${ROS_DISTRO}-diagnostic-updater \
   ros-${ROS_DISTRO}-slam-toolbox \
+  ros-${ROS_DISTRO}-nav2-map-server \
+  ros-${ROS_DISTRO}-nav2-amcl \
+  ros-${ROS_DISTRO}-nav2-planner \
+  ros-${ROS_DISTRO}-nav2-navfn-planner \
+  ros-${ROS_DISTRO}-nav2-controller \
+  ros-${ROS_DISTRO}-nav2-regulated-pure-pursuit-controller \
+  ros-${ROS_DISTRO}-nav2-behaviors \
+  ros-${ROS_DISTRO}-nav2-bt-navigator \
+  ros-${ROS_DISTRO}-nav2-velocity-smoother \
   python3-websockets \
   python3-pil \
   libudev-dev

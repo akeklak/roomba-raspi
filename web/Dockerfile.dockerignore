@@ -1,0 +1,7 @@
+# The UI image is built from the repo root (see docker/compose.yaml) but only needs web/ and the
+# robot meshes the 3D view shows.
+*
+!web
+web/node_modules
+web/dist
+!ros2_ws/src/roomba_bringup/models/roomba_675/meshes

@@ -13,12 +13,18 @@ services:
       - ROS_DOMAIN_ID=0
       # Keep ROS traffic inside the container.
       - ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+      # Saved maps go in maps/ in your checkout, so they survive restarts.
+      - ROOMBA_MAPS_DIR=/repo/maps
     command: ros2 launch roomba_sim sim.launch.py
     stdin_open: true
     tty: true
 
   ui:
-    build: ../web
+    build:
+      # From the repo root, because the 3D view shows the robot's meshes from roomba_bringup.
+      # web/Dockerfile.dockerignore keeps everything else out of the build.
+      context: ..
+      dockerfile: web/Dockerfile
     image: roomba-raspi-ui
     ports:
       - "8080:80"     # the web UI: open http://localhost:8080

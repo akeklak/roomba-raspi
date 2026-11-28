@@ -18,11 +18,14 @@ const WALLS: Array<[WallMode, string]> = [
   ['off', 'Off'],
 ];
 
-type Toggle = keyof Pick<Settings, 'scan' | 'memory' | 'trail' | 'camera3d' | 'cameraPip'>;
+type Toggle = keyof Pick<Settings, 'map' | 'plan' | 'costmap' | 'scan' | 'memory' | 'trail' | 'camera3d' | 'cameraPip'>;
 const TOGGLES: Array<[Toggle, string]> = [
+  ['map', 'Map'],
+  ['plan', 'Planned route'],
+  ['costmap', 'Costmap (where it avoids)'],
   ['scan', 'Lidar scan'],
   ['memory', 'Lidar memory'],
-  ['trail', 'Path'],
+  ['trail', 'Trail'],
   ['camera3d', 'Camera in 3D'],
   ['cameraPip', 'Camera window'],
 ];
@@ -63,7 +66,7 @@ function LayerControls({ hasWorld }: { hasWorld: boolean }) {
         </label>
       ))}
       <button className="ghost" onClick={() => data.clearMemory()}>
-        Clear memory and path
+        Clear memory and trail
       </button>
     </>
   );

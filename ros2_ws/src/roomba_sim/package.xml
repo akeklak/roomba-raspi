@@ -14,6 +14,9 @@
   <exec_depend>ros_gz_sim</exec_depend>
   <exec_depend>ros_gz_bridge</exec_depend>
   <exec_depend>roomba_web</exec_depend>
+  <exec_depend>roomba_nav</exec_depend>
+  <!-- For the Roomba 675 meshes the simulated robot wears. -->
+  <exec_depend>roomba_bringup</exec_depend>
   <exec_depend>teleop_twist_keyboard</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>visualization_msgs</exec_depend>

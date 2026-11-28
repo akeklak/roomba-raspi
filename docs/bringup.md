@@ -97,3 +97,23 @@ top of that file.
 
 Phase 1 is done when you can drive it from your laptop and see the scan, odometry, bumpers, cliff
 sensors and battery level live, running entirely on Roomba power.
+
+## 9. Map the apartment (phase 2)
+
+Do this after step 7: the map is only as good as the lidar position in the robot model.
+Try it in the sim first (`docs/simulation.md`, "Maps and navigation"): the buttons work the same.
+
+**(Pi)** `ros2 launch roomba_bringup robot.launch.py` starts mapping and navigation too (turn
+them off with `use_nav:=false`). With no saved map yet, it starts making one.
+
+1. **(laptop)** Open `http://localhost:8080/?ws=ws://roomba.local:8765` (run `./scripts/sim.sh ui`
+   first). The Map panel says **Making a map** and the room around the robot appears on the floor.
+2. Drive slowly through every room (set the speed slider to 0.15 m/s or so), or use **Go to** to
+   send it into rooms. Close doors you don't want mapped.
+3. Press **Done, use this map**. The map is saved in `~/roomba_maps` on the Pi, and from now on the
+   robot starts on it. Put it on the dock before restarting: that's where it expects to start.
+4. Click **Go to** and a spot in another room: it should drive there by itself, around furniture.
+   If it's lost (lidar dots off from the map's walls), use **Set position**.
+
+Phase 2 is done when you click a spot on the map and it drives there by itself, going around
+obstacles.

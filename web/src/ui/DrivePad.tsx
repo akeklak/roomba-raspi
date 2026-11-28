@@ -4,6 +4,7 @@ import { useRobot } from '../context';
 import { settings } from '../settings';
 import { useStore } from '../store';
 import { DriveController } from './drive';
+import { tool } from './tools';
 import type { DriveInput } from './drive';
 
 const PAD: Array<{ input: DriveInput; label: string; aria: string }> = [
@@ -20,7 +21,7 @@ const PAD: Array<{ input: DriveInput; label: string; aria: string }> = [
 
 /** Hold-to-drive buttons and a speed slider, bottom right. WASD and the arrow keys work too. */
 export function DrivePad() {
-  const { connection } = useRobot();
+  const { connection, data } = useRobot();
   const { speed } = useStore(settings);
   const info = useStore(connection.info);
   const drive = useMemo(() => new DriveController(connection), [connection]);
@@ -34,6 +35,11 @@ export function DrivePad() {
       if (e.repeat || e.metaKey || e.ctrlKey || isTyping(e)) return;
       if (e.code === 'Space') {
         drive.stopAll();
+        data.cancelNav();
+        e.preventDefault();
+      } else if (e.code === 'KeyG') {
+        const m = data.mapping.get();
+        if (m?.nav_ready && m.mode !== 'off') tool.set(tool.get() === 'goal' ? 'none' : 'goal');
         e.preventDefault();
       } else if (drive.setKey(e.code, true)) e.preventDefault();
     };
@@ -54,7 +60,7 @@ export function DrivePad() {
       drive.stopAll();
       drive.dispose();
     };
-  }, [drive]);
+  }, [drive, data]);
 
   const active = (p: DriveInput) => p[0] === input[0] && p[1] === input[1] && (p[0] !== 0 || p[1] !== 0);
   const disabled = info.status !== 'connected';
@@ -69,8 +75,10 @@ export function DrivePad() {
             className={active(b.input) ? 'on' : ''}
             onPointerDown={(e) => {
               e.currentTarget.setPointerCapture(e.pointerId);
-              if (b.input[0] === 0 && b.input[1] === 0) drive.stopAll();
-              else drive.setPad(b.input);
+              if (b.input[0] === 0 && b.input[1] === 0) {
+                drive.stopAll();
+                data.cancelNav();
+              } else drive.setPad(b.input);
             }}
             onPointerUp={() => drive.setPad([0, 0])}
             onPointerCancel={() => drive.setPad([0, 0])}
@@ -92,7 +100,7 @@ export function DrivePad() {
           onPointerUp={(e) => e.currentTarget.blur()}
         />
       </label>
-      <div className="keys">Hold W A S D or the arrow keys · Space stops</div>
+      <div className="keys">Hold W A S D or the arrow keys · Space stops · G picks a spot to go to</div>
     </div>
   );
 }

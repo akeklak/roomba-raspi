@@ -20,6 +20,7 @@
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>roomba_web</exec_depend>
+  <exec_depend>roomba_nav</exec_depend>
   <exec_depend>teleop_twist_keyboard</exec_depend>
 
   <test_depend>python3-pytest</test_depend>

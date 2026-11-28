@@ -1,0 +1,78 @@
+<?xml version="1.0"?>
+<robot name="roomba_675" xmlns:xacro="http://ros.org/wiki/xacro">
+  <!-- Stock chassis measured in description/measurements.HEIC. Dimensions are in metres. -->
+  <xacro:property name="body_diameter" value="0.340" />
+  <xacro:property name="top_height" value="0.080" />
+  <xacro:property name="tread_inside_offset" value="0.112" />
+  <xacro:property name="tread_width" value="0.015" />
+  <xacro:property name="caster_from_front" value="0.040" />
+
+  <!-- Provisional dimensions. Keep the Create 2 base_link height for TF compatibility. -->
+  <xacro:property name="base_link_height" value="0.017" />
+  <xacro:property name="ground_clearance" value="0.010" />
+  <xacro:property name="wheel_radius" value="0.036" />
+  <xacro:property name="caster_radius" value="0.012" />
+
+  <xacro:property name="body_radius" value="${body_diameter / 2}" />
+  <xacro:property name="body_height" value="${top_height - ground_clearance}" />
+  <xacro:property name="body_z" value="${ground_clearance + body_height / 2 - base_link_height}" />
+  <xacro:property name="wheel_y" value="${tread_inside_offset + tread_width / 2}" />
+  <xacro:property name="caster_x" value="${body_radius - caster_from_front}" />
+
+  <xacro:property name="mesh_path" value="package://roomba_bringup/models/roomba_675/meshes" />
+
+  <!-- Floor datum directly below the drive-axle midpoint. -->
+  <link name="base_footprint" />
+  <joint name="base_footprint_joint" type="fixed">
+    <parent link="base_footprint" />
+    <child link="base_link" />
+    <origin xyz="0 0 ${base_link_height}" />
+  </joint>
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 ${-base_link_height}" />
+      <geometry><mesh filename="${mesh_path}/body.dae" /></geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${body_z}" />
+      <geometry><cylinder radius="${body_radius}" length="${body_height}" /></geometry>
+    </collision>
+  </link>
+
+  <xacro:macro name="drive_wheel" params="side y">
+    <link name="${side}_wheel_link">
+      <visual>
+        <geometry><mesh filename="${mesh_path}/drive_wheel.dae" /></geometry>
+      </visual>
+      <collision>
+        <origin rpy="${pi / 2} 0 0" />
+        <geometry><cylinder radius="${wheel_radius}" length="${tread_width}" /></geometry>
+      </collision>
+    </link>
+    <joint name="${side}_wheel_joint" type="continuous">
+      <parent link="base_link" />
+      <child link="${side}_wheel_link" />
+      <origin xyz="0 ${y} ${wheel_radius - base_link_height}" />
+      <axis xyz="0 1 0" />
+    </joint>
+  </xacro:macro>
+
+  <xacro:drive_wheel side="left" y="${wheel_y}" />
+  <xacro:drive_wheel side="right" y="${-wheel_y}" />
+
+  <!-- Approximate the front caster as a fixed sphere for the static description. -->
+  <link name="front_wheel_link">
+    <visual>
+      <geometry><mesh filename="${mesh_path}/caster.dae" /></geometry>
+    </visual>
+    <collision>
+      <geometry><sphere radius="${caster_radius}" /></geometry>
+    </collision>
+  </link>
+  <joint name="front_castor_joint" type="fixed">
+    <parent link="base_link" />
+    <child link="front_wheel_link" />
+    <origin xyz="${caster_x} 0 ${caster_radius - base_link_height}" />
+  </joint>
+</robot>

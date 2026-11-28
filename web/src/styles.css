@@ -63,12 +63,24 @@ code {
   border-radius: 4px;
 }
 
-/* Status, top left */
-.status {
+/* Left column: status, then the map panel */
+.left-stack {
+  position: absolute;
   top: 16px;
   left: 16px;
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+.left-stack > .panel {
+  position: relative;
+}
+
+/* Status, top left */
+.status {
   padding: 14px 16px;
-  min-width: 210px;
 }
 .status .title {
   display: flex;
@@ -181,6 +193,164 @@ code {
   color: var(--text);
 }
 
+/* Map and navigation, under the status */
+.map-panel {
+  padding: 12px 14px;
+}
+.map-panel p {
+  margin: 6px 0 0;
+  line-height: 1.4;
+}
+.map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.map-title {
+  font-weight: 650;
+  font-size: 15px;
+}
+.chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.chip.mapping {
+  background: rgba(246, 173, 85, 0.16);
+  color: #fbd38d;
+}
+.chip.navigation {
+  background: rgba(79, 209, 197, 0.16);
+  color: var(--accent);
+}
+.chip.off {
+  background: rgba(252, 129, 129, 0.16);
+  color: var(--bad);
+}
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 12px;
+}
+.busy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--warn);
+}
+.spinner {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.map-panel .error {
+  color: var(--bad);
+  font-size: 12px;
+}
+.go-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.map-panel button {
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 7px 10px;
+}
+.map-panel button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.11);
+}
+.map-panel button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.map-panel button.primary {
+  flex: 1;
+  background: rgba(79, 209, 197, 0.2);
+  border-color: rgba(79, 209, 197, 0.5);
+  font-weight: 600;
+}
+.map-panel button.on,
+.map-panel button.primary.on {
+  background: rgba(79, 209, 197, 0.4);
+  border-color: var(--accent);
+}
+.map-panel button.stop {
+  background: rgba(252, 129, 129, 0.2);
+  border-color: rgba(252, 129, 129, 0.6);
+  font-weight: 600;
+}
+.map-panel button.quiet {
+  background: none;
+  color: var(--muted);
+}
+.nav-line {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.nav-line.succeeded {
+  color: var(--accent);
+}
+.nav-line.failed {
+  color: var(--bad);
+}
+.nav-line.canceled {
+  color: var(--muted);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.actions button {
+  flex: 1 1 auto;
+  font-size: 13px;
+}
+.confirm p {
+  font-size: 12px;
+}
+.notice {
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(79, 209, 197, 0.1);
+}
+.notice.error {
+  background: rgba(252, 129, 129, 0.14);
+  color: #feb2b2;
+}
+
+/* What to do with the picked tool, top center */
+.tool-hint {
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  border-color: rgba(79, 209, 197, 0.5);
+}
+.tool-hint span {
+  font-weight: 400;
+  color: var(--muted);
+}
+
 /* Waiting for the robot, top center */
 .help {
   top: 16px;
@@ -284,13 +454,37 @@ code {
   line-height: 1.3;
 }
 
+/* Short windows: keep the camera clear of the left column. */
+@media (max-height: 800px) and (min-width: 701px) {
+  .camera {
+    width: 240px;
+  }
+}
+
 @media (max-width: 700px) {
-  .status {
+  .left-stack {
     top: 12px;
     left: 12px;
-    min-width: 0;
+    width: 196px;
+    gap: 8px;
+  }
+  .status {
     padding: 10px 12px;
     font-size: 12px;
+  }
+  .map-panel {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  .map-panel .small {
+    display: none;
+  }
+  .tool-hint {
+    top: auto;
+    bottom: 300px;
+    white-space: normal;
+    width: max-content;
+    max-width: calc(100vw - 24px);
   }
   .layers {
     top: 12px;

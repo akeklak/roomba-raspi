@@ -90,6 +90,56 @@ export class TfTree {
     return out.copy(b.matrix).invert().multiply(a.matrix);
   }
 
+  /**
+   * Whether `lookup(target, source, time)` would be exact rather than a guess:
+   *   'ok'   every moving transform between the two has samples on both sides of `time`, at most
+   *          `maxGap` seconds apart;
+   *   'wait' one of them has nothing at or after `time` yet (its next sample is still on the way);
+   *   'no'   never: the frames aren't connected, `time` is older than the history kept, or a
+   *          transform has a hole around `time` (it stopped and started again, as when the robot
+   *          switches from mapping to the saved map).
+   */
+  coverage(target: string, source: string, time: number, maxGap: number): 'ok' | 'wait' | 'no' {
+    const a = this.chain(cleanFrame(source));
+    const b = this.chain(cleanFrame(target));
+    if (!a || !b || a[a.length - 1] !== b[b.length - 1]) return 'no';
+    // Only the transforms below the frames' lowest common ancestor matter.
+    while (a.length > 1 && b.length > 1 && a[a.length - 2] === b[b.length - 2]) {
+      a.pop();
+      b.pop();
+    }
+    let result: 'ok' | 'wait' = 'ok';
+    for (const frame of [...a.slice(0, -1), ...b.slice(0, -1)]) {
+      const edge = this.edges.get(frame)!;
+      if (edge.isStatic) continue;
+      const s = edge.samples;
+      const newest = s[s.length - 1].stamp;
+      if (time > newest) {
+        // The next sample will be at or after `time`, so too far from this one already means a hole.
+        if (time - newest > maxGap) return 'no';
+        result = 'wait';
+        continue;
+      }
+      if (time < s[0].stamp) return 'no';
+      let hi = 0;
+      while (s[hi].stamp < time) hi++;
+      if (hi > 0 && s[hi].stamp - s[hi - 1].stamp > maxGap) return 'no';
+    }
+    return result;
+  }
+
+  /** The frames from `frame` up to its root, or null if unknown or in a cycle. */
+  private chain(frame: string): string[] | null {
+    if (!this.known.has(frame)) return null;
+    const out = [frame];
+    for (let depth = 0; depth < MAX_DEPTH; depth++) {
+      const edge = this.edges.get(out[out.length - 1]);
+      if (!edge) return out;
+      out.push(edge.parent);
+    }
+    return null;
+  }
+
   private toRoot(frame: string, time?: number): { root: string; matrix: Matrix4 } | null {
     if (!this.known.has(frame)) return null;
     const matrix = new Matrix4();

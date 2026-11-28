@@ -1,8 +1,11 @@
-"""Simulated robot in Gazebo Harmonic with the same ROS topics as the real one.
+"""Simulated robot in Gazebo Harmonic with the same ROS topics as the real one, plus mapping and
+navigation (roomba_nav), exactly as the robot runs them.
 
     ros2 launch roomba_sim sim.launch.py                 # headless (Docker / Mac / server)
     ros2 launch roomba_sim sim.launch.py headless:=false # with the Gazebo window (Linux desktop)
-    ros2 launch roomba_sim sim.launch.py localization:=odom  # wheel odometry only, drift and all
+    ros2 launch roomba_sim sim.launch.py start_mode:=mapping  # start a new map even if one is saved
+    ros2 launch roomba_sim sim.launch.py localization:=ground_truth  # no SLAM or Nav2: Gazebo's
+                                                         # true pose instead (localization:=odom: none)
 
 View and drive it from the web UI (http://localhost:8080), which connects to our web bridge
 at ws://localhost:8765.
@@ -12,7 +15,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import AppendEnvironmentVariable, DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition, LaunchConfigurationEquals
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration, PythonExpression
@@ -31,6 +34,10 @@ def generate_launch_description():
         "('-r -s --headless-rendering ' if '", headless, "' == 'true' else '-r ')",
         " + '", world, "'",
     ])
+    # The robot wears the Roomba 675 meshes from roomba_bringup (package://roomba_bringup/...).
+    # Gazebo looks those up as roomba_bringup/... under each folder in GZ_SIM_RESOURCE_PATH.
+    mesh_path = AppendEnvironmentVariable(
+        'GZ_SIM_RESOURCE_PATH', os.path.dirname(get_package_share_directory('roomba_bringup')))
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(get_package_share_directory('ros_gz_sim'), 'launch', 'gz_sim.launch.py')),
@@ -69,11 +76,31 @@ def generate_launch_description():
         }],
     )
 
-    # "world" is the apartment's frame. Wheel odometry ("odom") drifts when the wheels slip, so
-    # by default the sim publishes world -> odom from Gazebo's true pose (perfect localization),
-    # which keeps the lidar lined up with the walls. On the real robot, SLAM does this job with
-    # map -> odom. localization:=odom instead ties world to odom at the spawn pose and lets the
-    # drift show.
+    # "world" is the apartment's frame. Wheel odometry ("odom") drifts when the wheels slip.
+    # localization:=slam (default) runs mapping and navigation as on the robot: SLAM or AMCL
+    # publish map -> odom, and the map frame starts where the robot spawned (the dock), so
+    # world -> map is fixed at the spawn pose. Comparing the map with the 3D apartment in the web
+    # UI then shows how well SLAM is doing.
+    # localization:=ground_truth publishes world -> odom from Gazebo's true pose instead (perfect,
+    # no Nav2); localization:=odom ties world to odom at the spawn pose and lets the drift show.
+    world_to_map = Node(
+        condition=LaunchConfigurationEquals('localization', 'slam'),
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='world_to_map',
+        arguments=[
+            '--x', LaunchConfiguration('x'), '--y', LaunchConfiguration('y'),
+            '--yaw', LaunchConfiguration('yaw'),
+            '--frame-id', 'world', '--child-frame-id', 'map',
+        ],
+        parameters=[{'use_sim_time': True}],
+    )
+    nav = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(get_package_share_directory('roomba_nav'), 'launch', 'nav.launch.py')),
+        condition=LaunchConfigurationEquals('localization', 'slam'),
+        launch_arguments={'use_sim_time': 'true', 'start_mode': LaunchConfiguration('start_mode')}.items(),
+    )
     ground_truth_localizer = Node(
         condition=LaunchConfigurationEquals('localization', 'ground_truth'),
         package='roomba_sim',
@@ -115,17 +142,23 @@ def generate_launch_description():
         DeclareLaunchArgument('world', default_value=os.path.join(share, 'worlds', 'apartment.sdf')),
         DeclareLaunchArgument('headless', default_value='true'),
         DeclareLaunchArgument('use_web_bridge', default_value='true'),
-        DeclareLaunchArgument('localization', default_value='ground_truth',
-                              choices=['ground_truth', 'odom'],
-                              description='Where world -> odom comes from (see above)'),
+        DeclareLaunchArgument('localization', default_value='slam',
+                              choices=['slam', 'ground_truth', 'odom'],
+                              description='Where the robot\'s position comes from (see above)'),
+        DeclareLaunchArgument('start_mode', default_value='auto',
+                              choices=['auto', 'mapping', 'navigation', 'off'],
+                              description='auto: navigate on the saved map if there is one, else map'),
         # Spawn just east of the dock, facing east.
         DeclareLaunchArgument('x', default_value='-3.4'),
         DeclareLaunchArgument('y', default_value='0.0'),
         DeclareLaunchArgument('yaw', default_value='0.0'),
+        mesh_path,
         gazebo,
         robot_state_publisher,
         spawn,
         bridge,
+        world_to_map,
+        nav,
         ground_truth_localizer,
         world_to_odom,
         world_markers,
