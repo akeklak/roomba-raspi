@@ -78,10 +78,10 @@ export function mapPixels(cells: Uint8Array, out: Uint8Array = new Uint8Array(ce
 export const COSTMAP_RED: readonly [number, number, number] = [255, 32, 32];
 
 /**
- * RGBA pixels for Nav2's costmap, all in COSTMAP_RED: solid at obstacles (100) and nearly solid
- * where the robot's middle can't go (99), so what's blocked stands out. Around them, where the
- * robot may drive but would rather not (1 to 98, over about half a meter), a see-through red
- * fades out to clear, so floor it can use never looks blocked. Free and unknown are clear.
+ * RGBA pixels for Nav2's costmap: solid COSTMAP_RED only on obstacles (100). Around them it is
+ * floor the robot can drive on (its middle just can't go within its radius of an obstacle, 99,
+ * and it would rather keep a little further off, 1 to 98), so that gets only a faint tint that
+ * fades out, and free or unknown floor stays clear.
  */
 export function costmapPixels(cells: Uint8Array, out: Uint8Array = new Uint8Array(cells.length * 4)): Uint8Array {
   const [r, g, b] = COSTMAP_RED;
@@ -95,7 +95,7 @@ export function costmapPixels(cells: Uint8Array, out: Uint8Array = new Uint8Arra
     out[o] = r;
     out[o + 1] = g;
     out[o + 2] = b;
-    out[o + 3] = v >= 100 ? 255 : v >= 99 ? 210 : 12 + Math.round((108 * (v - 1)) / 97);
+    out[o + 3] = v >= 100 ? 255 : v >= 99 ? 64 : 8 + Math.round((40 * (v - 1)) / 97);
   }
   return out;
 }

@@ -25,10 +25,15 @@ def test_stays_at_real_time_when_nothing_is_lost():
     assert settle(stall=0.0)[-1] == pytest.approx(1.0)
 
 
-def test_backs_off_when_running_fast_but_never_below_real_time():
+def test_backs_off_at_once_when_running_fast_but_never_below_real_time():
     # The camera was turned off while the target was raised: the sim runs fast for a moment.
-    assert next_target(1.5, 1.5) < 1.5
+    assert next_target(1.5, 1.5) == pytest.approx(1.0)
+    assert next_target(1.8, 1.2) == pytest.approx(1.5)
     assert next_target(1.1, 1.3) == MIN_TARGET
+
+
+def test_reaches_real_time_even_when_rendering_takes_almost_half_the_time():
+    assert settle(stall=0.44, periods=60)[-1] == pytest.approx(1.0, abs=0.01)
 
 
 def test_does_not_wind_up_when_the_machine_cannot_keep_up():

@@ -321,7 +321,7 @@ export class RobotData {
       p.copyWithin(0, (TRAIL_CAPACITY / 2) * 3);
       t.count = TRAIL_CAPACITY / 2;
     }
-    p.set([e[12], e[13], 0.005], t.count * 3);
+    p.set([e[12], e[13], 0.016], t.count * 3);
     t.count++;
     t.version++;
   }
@@ -376,7 +376,7 @@ export class RobotData {
   private onPlan(msg: Message): void {
     const points = (msg.points ?? []) as Array<[number, number]>;
     const positions = new Float32Array(points.length * 3);
-    points.forEach(([x, y], i) => positions.set([x, y, 0.012], i * 3));
+    points.forEach(([x, y], i) => positions.set([x, y, 0.022], i * 3));
     this.plan = { frame: msg.frame ?? MAP_FRAME, positions, version: this.plan.version + 1 };
   }
 

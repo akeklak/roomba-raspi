@@ -54,7 +54,7 @@ describe('grid colors', () => {
     expect(px[8]).toBeGreaterThan(px[4]);
   });
 
-  it('leave free costmap cells clear and fade bright red in toward obstacles', () => {
+  it('leave free costmap cells clear, tint the floor near obstacles faintly, and make obstacles solid red', () => {
     const px = costmapPixels(new Uint8Array([0, UNKNOWN, 1, 30, 98, 99, 100]));
     expect(px[3]).toBe(0);
     expect(px[7]).toBe(0);
@@ -62,8 +62,7 @@ describe('grid colors', () => {
     expect(alpha[0]).toBeGreaterThan(0);
     for (let i = 1; i < alpha.length; i++) expect(alpha[i]).toBeGreaterThan(alpha[i - 1]);
     expect(alpha[4]).toBe(255); // solid at obstacles
-    expect(alpha[2]).toBeLessThan(128); // where it can still drive stays see-through
-    expect(alpha[3]).toBeGreaterThan(200); // where its middle can't go is nearly solid
+    expect(Math.max(alpha[0], alpha[1], alpha[2], alpha[3])).toBeLessThan(80); // floor it can use: faint
     for (const i of [2, 3, 4, 5, 6]) expect([...px.subarray(i * 4, i * 4 + 3)]).toEqual([...COSTMAP_RED]);
   });
 });

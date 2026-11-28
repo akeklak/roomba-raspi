@@ -77,10 +77,17 @@ def generate_launch_description():
     )
 
     # Keeps sim time in step with the wall clock while Gazebo renders the camera and lidar
-    # (roomba_sim/realtime_pacer.py). It also sets 2 ms physics steps.
+    # (roomba_sim/realtime_pacer.py). It also sets 4 ms physics steps.
     realtime_pacer = Node(
         package='roomba_sim',
         executable='realtime_pacer',
+        output='screen',
+    )
+
+    # Lights stop casting shadows in the robot's camera picture (roomba_sim/no_shadows.py).
+    no_shadows = Node(
+        package='roomba_sim',
+        executable='no_shadows',
         output='screen',
     )
 
@@ -202,6 +209,7 @@ def generate_launch_description():
         mesh_path,
         gazebo,
         realtime_pacer,
+        no_shadows,
         robot_state_publisher,
         spawn,
         safety_floor,

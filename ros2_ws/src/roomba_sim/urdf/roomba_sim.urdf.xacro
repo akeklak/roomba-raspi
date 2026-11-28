@@ -28,8 +28,13 @@
        Heights are above the floor. -->
   <xacro:property name="lidar_x" value="-0.02" />
   <xacro:property name="lidar_height" value="0.13" />
-  <xacro:property name="camera_x" value="0.15" />
-  <xacro:property name="camera_height" value="0.09" />
+  <!-- The camera sits on the face of the front bumper, like the front camera of iRobot's j7.
+       The placeholder in roomba.urdf.xacro (0.15 m forward, 0.09 m up) is where the Roomba 675's
+       shell is, 1 cm above its IR dome: from there the sim camera clipped into the shell and
+       saw bits of its inside as black shapes along the bottom of the picture. Move both once
+       the real camera is mounted and measured. -->
+  <xacro:property name="camera_x" value="0.175" />
+  <xacro:property name="camera_height" value="0.06" />
   <xacro:property name="camera_pitch" value="0.35" />
   <!-- Wide-angle camera standing in for the fisheye lens (about 140 degrees). -->
   <xacro:property name="camera_hfov" value="2.4" />
@@ -237,7 +242,8 @@
           <format>R8G8B8</format>
         </image>
         <clip>
-          <near>0.03</near>
+          <!-- Close enough to see the floor right in front of the bumper. -->
+          <near>0.01</near>
           <far>20.0</far>
         </clip>
       </camera>

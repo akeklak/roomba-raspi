@@ -28,6 +28,7 @@ setup(
             'world_markers = roomba_sim.world_markers:main',
             'ground_truth_localizer = roomba_sim.ground_truth_localizer:main',
             'realtime_pacer = roomba_sim.realtime_pacer:main',
+            'no_shadows = roomba_sim.no_shadows:main',
         ],
     },
 )

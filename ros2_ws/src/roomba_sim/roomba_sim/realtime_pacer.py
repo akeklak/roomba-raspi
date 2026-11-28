@@ -9,8 +9,10 @@ the robot and everything that follows it moved slower than they should.
 This watches how fast sim time actually advances and raises Gazebo's target real-time factor just
 enough to make up for the time spent rendering, so the sim runs at 1x overall. With nothing to
 make up (the camera off, a simple world) the target settles back to 1. It also sets the physics
-step, which is how much sim time each step covers: 2 ms leaves Gazebo enough spare time per
-step to catch up (1 ms steps cost as much each and left too little).
+step, which is how much sim time each step covers. A step costs about the same however long it
+is, so longer steps leave time to catch up: with the web page and camera open, the kitchen
+topped out at 0.9x with 2 ms steps and at 1.6x with 4 ms, and the robot drives and turns the
+same (measured against Gazebo's true pose).
 
 Runs next to Gazebo in the sim only (sim.launch.py); it talks to Gazebo directly, not over ROS.
 """
@@ -24,10 +26,10 @@ from typing import Optional, Tuple
 # The target never drops below real time, nor runs away if the machine simply can't keep up.
 MIN_TARGET = 1.0
 MAX_TARGET = 3.0
-STEP_SIZE = 0.002            # physics step, seconds of sim time
-PERIOD = 1.0                 # how often to measure and adjust, wall seconds
+STEP_SIZE = 0.004            # physics step, seconds of sim time
+PERIOD = 0.5                 # how often to measure and adjust, wall seconds
 GAIN = 0.7                   # how much of the measured shortfall to correct each period
-WINDUP = 1.8                 # the target stays below this times the speed it achieved
+WINDUP = 2.5                 # the target stays below this times the speed it achieved
 DEADBAND = 0.01              # don't bother Gazebo with changes smaller than this (1%)
 
 
@@ -40,11 +42,12 @@ def next_target(target: float, measured: float, gain: float = GAIN,
     outside the physics steps, so asking for more makes up for it; repeating this settles on 1x.
     Only part of each correction is taken (`gain`) so one noisy measurement can't make it swing,
     and the target stays within WINDUP of what was achieved, so that a machine that simply
-    can't keep up doesn't wind it up to a burst of fast-forward once it can."""
+    can't keep up doesn't wind it up to a burst of fast-forward once it can. Running fast (the
+    camera was just turned off) is corrected in one go, so that lasts a single period."""
     if measured <= 0.0:
         return target
     wanted = target / measured
-    step = target * (wanted / target) ** gain
+    step = target * (wanted / target) ** (1.0 if measured > 1.0 else gain)
     cap = max(lo, min(hi, WINDUP * measured))
     return min(cap, max(lo, step))
 
