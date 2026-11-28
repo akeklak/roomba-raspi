@@ -14,8 +14,9 @@ import { World } from './World';
 export function Scene() {
   const s = useStore(settings);
   return (
+    // No shadows: the shadow map's blocky, blotchy shadows looked worse than none, above all
+    // on the photographed kitchen (its photos already carry the real room's shading).
     <Canvas
-      shadows
       dpr={[1, 2]}
       camera={{ position: [-5.2, -2.4, 2.4], up: [0, 0, 1], fov: 50, near: 0.02, far: 200 }}
       gl={{ antialias: true, preserveDrawingBuffer: true }}
