@@ -15,12 +15,14 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import AppendEnvironmentVariable, DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import (AppendEnvironmentVariable, DeclareLaunchArgument, IncludeLaunchDescription,
+                            OpaqueFunction)
 from launch.conditions import IfCondition, LaunchConfigurationEquals
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterValue
+from roomba_sim.doorways import doors_sdf
 
 # Floor everywhere, just under the world's own floor. A world may model only some rooms (the
 # kitchen ends at its doorways: the space beyond is unmodeled), and a robot that drove through
@@ -41,6 +43,16 @@ SAFETY_FLOOR_SDF = """<sdf version="1.9">
     </link>
   </model>
 </sdf>"""
+
+
+def closed_doors(context):
+    """A shut door in each doorway of a world that ends at its doorways (roomba_sim/doorways.py),
+    so the robot stays in the rooms that are modeled. Nothing for worlds without them."""
+    sdf = doors_sdf(LaunchConfiguration('world').perform(context))
+    if sdf is None:
+        return []
+    return [Node(package='ros_gz_sim', executable='create', output='screen',
+                 arguments=['-name', 'closed_doors', '-string', sdf])]
 
 
 def generate_launch_description():
@@ -193,6 +205,7 @@ def generate_launch_description():
         robot_state_publisher,
         spawn,
         safety_floor,
+        OpaqueFunction(function=closed_doors),
         bridge,
         world_to_map,
         nav,

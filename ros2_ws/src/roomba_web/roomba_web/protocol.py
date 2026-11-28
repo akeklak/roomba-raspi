@@ -389,7 +389,7 @@ NAV_ERRORS = {
     107: 'driving took too long',
     202: 'it does not know where it is on the map yet',
     203: 'the robot is off the map',
-    204: 'that spot is off the map',
+    204: "that spot isn't on the map yet. Drive closer so the robot can see it first",
     205: 'the robot is too close to something to plan from there',
     206: 'that spot is too close to a wall or furniture',
     207: 'planning took too long',

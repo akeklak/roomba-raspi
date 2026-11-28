@@ -164,6 +164,11 @@ The dock is the green block on the west wall; the robot starts just east of it, 
 Not simulated yet: bumpers, cliff sensors, battery, docking and the vacuum. Those come with
 phase 3.
 
+The sim lays a plain floor under every world, and shuts the doorways of a world that stops at
+them (the kitchen's five; the rooms beyond aren't modeled), so the robot stays in the rooms that
+exist. The map shows each shut doorway as a wall; the 3D view still draws it open. While making
+a map, **Go to** only works for spots the robot has already seen: send it somewhere nearer first.
+
 The sim keeps to real time (**Sim time** in the status panel keeps pace with a clock). Gazebo
 renders the lidar and camera in software here, and pauses the physics while it does, which on its
 own made the kitchen run at about 0.7x. Three things make up for it: the camera is small and only
